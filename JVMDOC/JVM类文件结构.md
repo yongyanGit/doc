@@ -39,6 +39,7 @@ class文件格式：
 示例代码：
 
 ```
+package zookeeperdemo;
 public class TestClass {
 	
 	private int m;
@@ -135,11 +136,179 @@ ac00 0000 0200 0c00 0000 0600 0100 0000
 * 方法的名称和描述符
 
 
+常量池中的每一个常量都是一个表，每一张表都有一个特点，表开始的第一位是一个u1类型的标志位，代表当前这个常量是属于那种常量类型。如下图14种常量类型：
+
+| 类型                             | 标志 | 描述                     |
+| -------------------------------- | ---- | ------------------------ |
+| CONSTANT_Utf8_info               | 1    | UTF-8编码的字符串        |
+| CONSTANT_Integer_info            | 3    | 整形字面量               |
+| CONSTANT_Float_info              | 4    | 浮点型字面量             |
+| CONSTANT_Long_info               | 5    | 长整形字面量             |
+| CONSTANT_Double_info             | 6    | 双精度浮点型字面量       |
+| CONSTANT _Class_info             | 7    | 类或接口的符号引用       |
+| CONSTANT_String_info             | 8    | 字符串类型字面量         |
+| CONSTANT_Fieldref_info           | 9    | 字段的符号引用           |
+| CONSTANT_Methodref_info          | 10   | 类中方法的符号引用       |
+| CONSTANT_InterfaceMethodref_info | 11   | 接口中方法的符号引用     |
+| CONSTANT_NameAndType_info        | 12   | 字段或方法的部分符号引用 |
+| CONSTANT_MethodHand_info         | 15   | 表示方法句柄             |
+| CONSTANT_MethodType_info         | 16   | 标志方法类型             |
+| CONSTANT_InvokeDynamic           | 18   | 表示一个动态方法调用点   |
+
+我们再来看示例代码编译后的字节码，常量池的第一项常量，它的标志位是：cafe babe 0000 0034 0033 **`07`**00 0201，查询类型表，07是一个类或接口的引用。前面提到过，常量池的每一个常量都是一张表，CONSTANT _Class_info的表结构如下：
+
+| 类型 | 名称       | 数量 |
+| ---- | ---------- | ---- |
+| u1   | tag        | 1    |
+| u2   | name_index | 1    |
+
+tag是标志位，区分常量类型。name_index是一个索引值，它指向常量池中的一个CONSTANT_Utf8_info类型常量，此常量代表这个类(或接口)的全限定名。name_index的值是：cafe babe 0000 0034 0033 07**`00 02`**01，0x0002指向常量池的第2项常量。
+
+继续查找常量池中的第二项常量，它的标志位是：0700 02 **`01`**   0017，0x01是一个CONSTANT_Utf8_info常量，结构类型如下：
+
+| 类型 | 名称   | 数量   |
+| ---- | ------ | ------ |
+| u1   | tag    | 1      |
+| u2   | length | 1      |
+| u1   | bytes  | length |
+
+length说明这个utf-8编码的字符串长度是多少个字节。它后面紧跟着的就是长度为length字节的连续数据。连续数据采用的UTF-8缩略编码表示字符串，从```\u0001```到```\u007f```之间的字符串（相当于1~127的ASCII码），用一个字节表示，从```/u0080```到```\u7ff```之间用两个字节表示，从```\u0800```到```\uffff```之间按照普通的utf-8编码规则使用三个字节。
+
+class文件中的类、方法、字段名称等都是用CONSTANT_Utf8_info来描述的，CONSTANT_Utf8_info能描述的最大长度是u2的最大值(65535)，如果我们在定义方法名或者成员变量时，如果方法名称长度超过了64kb，将会编译不通过。
+
+我们接着往下解析，常量的length值等于：0700 0201 **`0017`**，0x0017从length后面连续23个字节：```7a6f 6f6b 6565 7065 7264 656d 6f2f 5465 7374 436c 6173 73```,转换后刚好是：```zookeeperdemo/TestClass``。
+
+到此为止，我们已经解析了常量池的两项常量，剩余常量也是通过类似的方法来解析。根据标志位确定常量类型，如果是一个CONSTANT_Utf8_info类型常量，根据length解析utf8字符串，否则根据索引值跳转到索引值指向的常量，继续解析。
+
+在JDK的bin目录下，有一个用于分析class文件的工具：javap。通过:```javap -v ```＋class类名，可以将类文件中的常量池解析出来，如下图：
+
+```
+Compiled from "TestClass.java"
+public class zookeeperdemo.TestClass
+  minor version: 0
+  major version: 52
+  flags: ACC_PUBLIC, ACC_SUPER
+Constant pool:
+   #1 = Class              #2             // zookeeperdemo/TestClass
+   #2 = Utf8               zookeeperdemo/TestClass
+   #3 = Class              #4             // java/lang/Object
+   #4 = Utf8               java/lang/Object
+   #5 = Utf8               m
+   #6 = Utf8               I
+   #7 = Utf8               <init>
+   #8 = Utf8               ()V
+   #9 = Utf8               Code
+  #10 = Methodref          #3.#11         // java/lang/Object."<init>":()V
+  #11 = NameAndType        #7:#8          // "<init>":()V
+  #12 = Utf8               LineNumberTable
+  #13 = Utf8               LocalVariableTable
+  #14 = Utf8               this
+  #15 = Utf8               Lzookeeperdemo/TestClass;
+  #16 = Utf8               inc
+  #17 = Utf8               ()I
+  #18 = Fieldref           #1.#19         // zookeeperdemo/TestClass.m:I
+  #19 = NameAndType        #5:#6          // m:I
+  #20 = Utf8               SourceFile
+  #21 = Utf8               TestClass.java
 
 
+```
 
+## 4、访问标志
 
+常量池结束后，紧接着两个字节是访问标志，这个标志用于识别一些类或者接口层次的访问信息，包括：这个class是类还是接口；是否定义为public类型，是否定义为abstract;如果是类，是否声明为final等。
 
+| 标志名称       | 标志值 | 含义                                                         |
+| -------------- | ------ | ------------------------------------------------------------ |
+| ACC_PUBLIC     | 0X0001 | 是否为public类型                                             |
+| ACC_FINAL      | 0x0010 | 是否被声明为final,只有类可以声明                             |
+| ACC_SUPER      | 0X0020 | 是否允许使用invokespecial字节码的新语义，invokespecial指令在JDK1.0.2发生过改变，为了区别这条指令使用哪种语义，JDK1.0.2之后编译出来的类的这个标志都必须为真 |
+| ACC_INTERFACE  | 0x0200 | 标识这是一个接口                                             |
+| ACC_ABSTRACT   | 0x0400 | 是否是abstract类型，对于接口和抽象类，此标志值为真，其它值为假 |
+| ACC_SYNTHENTIC | 0x1000 | 标识这个类不是由用户代码产生的                               |
+| ACC_ANNOTATION | 0x2000 | 标识这是一个注解                                             |
+| ACC_ENUM       | 0X4000 | 标识这是一个枚举                                             |
+
+如本文提供的示例代码TestClass,它是一个public类型的类，因此ACC_PUBLIC、ACC_SUPER为真，其它为假，因此它的access_flags的值应该是0x0001|0x0020=0x0021,参照编译后的class 文件：6176 61**`00 21`**00 0100 0300，结果也是一致的。
+
+## 5. 类索引、父类索引与接口索引集合
+
+类索引和父类索引都是一个u2类型的数据。类索引用于确定这个类的全限定名称，父类索引用于确定这个类的父类的全限定名称，由于Java不允许类多继承，所以每个类只有一个父类。除Object外，每个类都有父类。接口索引集合是一组u2型的数据，因为类可以多继承，所以一个类可以有多个接口。接口索引集合的入口第一项(u2型数据)是接口计数器，表示索引表的数量，如果这个类没有实现任何接口则计数器为0。如示例代码的类索引、父类索引、接口索引集合：```0001 0003 0000```：前两个u2型数据分别指向常量池中的第一个和第二个常量，第三个u2型数据为0x0000表示TestClass没有实现任何接口。
+
+部分常量池内容：
+
+```
+   #1 = Class              #2 // zookeeperdemo/TestClass
+   #2 = Utf8               zookeeperdemo/TestClass
+   #3 = Class              #4  // java/lang/Object
+   #4 = Utf8               java/lang/Object
+```
+
+## 6. 字段表集合
+
+字段表用来描述接口或者类中声明的变量。字段包括类级别变量以及实例级变量，但是不包括方法内部声明的局部变量。
+
+描述一个字段可以包括的信息有：字段的作用域(public、private、protected修饰符)，是实例变量还是类变量(static修饰符)，可变性(final修饰符)，并发可见性(volatitle修饰符)，是否可被序列化(transient修饰符)，字段数据类型，字段名称等。上述的信息中，修饰符都是boolean型，要么有，要么没有，很适合用标志位来表示，而字段名称、类型无法确定字段名称、类型什么，所以需要通过常量池来保存常量名称、类型。
+
+字段表结构
+
+| 类型           | 名称             | 数量             |
+| -------------- | ---------------- | ---------------- |
+| u2             | access_flags     | 1                |
+| u2             | name_index       | 1                |
+| u2             | descriptor_index | 1                |
+| u2             | attributes_count | 1                |
+| attribute_info | attributes       | attributes_count |
+
+字段修饰符放在access_flags中，它与类中的access_flags非常的类似。
+
+字段访问标志
+
+| 标志名称      | 标志值 | 含义                     |
+| ------------- | ------ | ------------------------ |
+| ACC_PUBLIC    | 0X0001 | 字段是否public           |
+| ACC_PRIVATE   | 0x0002 | 字段是否private          |
+| ACC_PROTECTED | 0X0004 | 字段是否protected        |
+| ACC_STATIC    | 0X0008 | 字段是否static           |
+| ACC_FINAL     | 0X0010 | 字段是否final            |
+| ACC_VOLATILE  | 0X0040 | 字段是否volatile         |
+| ACC_TRANSIENT | 0X0080 | 字段是否transient        |
+| ACC_SYNTHETIC | 0X1000 | 字段是否有编译器自动生成 |
+| ACC_ENUM      | 0X4000 | 字段是否enum             |
+
+在实际情况中，ACC_PUBLIC、ACC_PRIVATE、ACC_PROTECTED只能选一，ACC_FINAL和ACC_VOLATILE不能同时选择。在接口中，字段必须有：ACC_PUBLIC、ACC_STATIC、ACC_FINAL。
+
+name_index和descriptor_index是对常量池的引用，分别对应着字段的简单名称和字段描述。字段的简单名称是指没有字段类型(方法的简单名称是指没有返回类型和参数)。如这个类中的字段```m```和方法```int inc()```，它们的简单名称分别是：
+
+```m```和```inc```。
+
+描述符 的作用是用来描述字段的数据类型、方法的参数列表(数量、类型、顺序)、和返回值。根据描述规则，基本数据类型、void都用一个大写字符来描述，而对象类型则用字符L加对象的全限定名来表示。如下是描述符标识字符含义
+
+| 标识字符 | 含义   | 标识字符 | 含义                          |
+| -------- | ------ | -------- | ----------------------------- |
+| B        | byte   | J        | long                          |
+| C        | char   | S        | short                         |
+| D        | double | Z        | boolean                       |
+| F        | fload  | V        | void                          |
+| I        | int    | L        | 对象类型如：Ljava/lang/Object |
+
+对于数组类型，每一个维度将使用一个前置的```[```来描述，如：```java.lang.String[][]```类型的数组，将被记录为：```[[Ljava/lang/String```，```int[]```将被记为```[I```。
+
+用描述符来描述方法时，按照先参数列表后返回值的顺序来描述，参数列表按照参数的顺序放在一组小括号```()```中。如方法void inc()的描述符是()V，方法java.lang.String.toString()的描述符是```()Ljava/lang/String```，方法```int indexOf(char[]source,int sourceOffset,int sourceCount,char[]target,int targetOffsetmint targetCount,int fromIndex)```的描述符是```([CII[CIII])I```。
+
+在给出的示例代码中，第一个u2型数据是容量计数器，它的值是```0X0001```，说明这个类中只有一个字段表数据。接着就是字段访问标志```access_flags```,它的值为```0x0002```，说明这个字段是私有的，接着是字段简单名称```name_index```，它的值是0x0005，从常量表中查询得出，位于第五号位置的常量是```m```，然后是字段描述```descriptor_index```，它的值```0x0006```，查看常量池中第六号位置是```I```，根据这些信息可以推断出源代码定义的字段是：```private int m```。
+
+在字段描述之后，还有一个属性集合，用来存储一些额外的信息，这个后面在讲。
+
+部分常量池内容：
+
+```
+ #4 = Utf8               java/lang/Object
+ #5 = Utf8               m
+ #6 = Utf8               I
+ #16 = Utf8               inc
+ #17 = Utf8               ()I
+```
 
 
 
