@@ -310,6 +310,81 @@ name_index和descriptor_index是对常量池的引用，分别对应着字段的
  #17 = Utf8               ()I
 ```
 
+## 7. 方法表集合
+
+class文件中方法的存储结构和字段一致，表结构也和字段一样，依次包括了：访问标志(access_flags)、名称索引(name_index)、描述符索引(descroptor_index)、属性表集合几项，表结构如下：
+
+| 类型           | 名称             | 数量             |
+| -------------- | ---------------- | ---------------- |
+| u2             | access_flags     | 1                |
+| u2             | name_index       | 1                |
+| u2             | descriptor_index | 1                |
+| u2             | attributes_count | 1                |
+| attribute_info | attributes       | attributes_count |
+
+方法表access_flags与字段表有点区别，volatile关键字和transient关键字不能修饰方法，与之相对应的synchronized、native、strictfp、abstract关键字可以修饰方法、如下标志位表：
+
+| 标志名称         | 标志值 | 含义                             |
+| ---------------- | ------ | -------------------------------- |
+| ACC_PUBLIC       | 0x0001 | 方法是否为public                 |
+| ACC_PRIVATE      | 0x0002 | 方法是否为private                |
+| ACC_PROTECTED    | 0x0004 | 方法是否为protected              |
+| ACC_STATIC       | 0x0008 | 方法是否为static                 |
+| ACC_FINAL        | 0x0010 | 方法是否为final                  |
+| ACC_SYNCHRONIZED | 0x0020 | 方法是否为synchronized           |
+| ACC_BRIDGE       | 0x0040 | 方法是否是由编译器产生的桥接方法 |
+| ACC_VARARGS      | 0x0080 | 方法是否接受不定参数             |
+| ACC_NATIVE       | 0x0100 | 方法是否为native                 |
+| ACC_ABSTRACT     | 0x0400 | 方法是否为abstract               |
+| ACC_STRICTEP     | 0x0800 | 方法是否为strictfp               |
+| ACC_SYNTHETIC    | 0x1000 | 方法是否由编译器自动产生         |
+|                  |        |                                  |
+
+方法的定义通过访问标志、名称索引、描述符索引表达清楚，方法里面的代码存放在方法属性表集合中一个名为```code```的属性里面。
+
+方法表集合中的第一个u2类型数据是```0x0002```，表示集合中有2个方法，一个是编译器添加的实例构造器```<init>```另一个就是源码中的```inc()```。第一个方法的访问标志的值是```0x0001```，代表这个方法是public型，名称索引值为```0x0007```，查看常量池的方法名称是```<init>```，描述符索引是```0x0008```，对应常量是```()V```，属性表计数器attributes_count的值为0x0001，表示此方法属性表集合有一项属性，属性表名称索引为```0x0009```，对应常量为```code```，说明此属性是方法的字节码描述。
+
+## 8. 属性表集合
+
+在Class文件、字段表、方法表都可以携带自己的属性表集合，以用来描述某些专有的信息，下面就方法表中的code属性来详细解释。
+
+java程序方法中的代码经过javac编译器处理后，最终变为字节码指令存储在Code属性内。
+
+code属性表结构
+
+| 类型           | 名称                   | 数量                   |
+| -------------- | ---------------------- | ---------------------- |
+| u2             | attribute_name_index   | 1                      |
+| u4             | attribute_length       | 1                      |
+| u2             | max_stack              | 1                      |
+| u2             | max_locals             | 1                      |
+| u4             | code_length            | 1                      |
+| u1             | code                   | code_length            |
+| u2             | exception_table_length | 1                      |
+| exception_info | exception_table        | exception_table_length |
+| u2             | attributes_count       | 1                      |
+| attribute_info | attributes             | attributes_count       |
+
+```attribute_name_index```是一项指向```CONSTANT_Utf8_info```型常量的索引，常量值固定为```code```，```attribute_length```是指属性值的长度。
+
+```max_stack```操作数栈深度的最大值，在方法执行的任意时刻，操作数栈都不会超过这个深度。虚拟机运行的时候会根据这个值来分配栈帧中的操作栈深度。
+
+```max_locals```代表了局部变量所需的存储空间，max_locals的单位是Slot，Slot是虚拟机为局部变量分配内存所需要的最小单位。对于byte、char、float、int、short、int、short、boolean 和returnAddress等长度不超过32的数据类型，每个局部变量占用1个Slot来存放，而double和long这两种64位数据则需要两个Slot来存放。方法参数(包括this)、显示异常处理器的参数（try-catch语句中catch块所定义的异常）、方法体中定义的局部都需要局部变量表来存放。
+
+```code_length```代表字节码长度，它虽然是u4型数据，但是实际上只使用了u2的长度，所以一个方法如果超过65535条字节码，java编译器会拒绝编译。
+
+```code```是用于存储java源程序编译后生成的字节码指令，每个字节是一个u1类型的单字节，当虚拟机读取到code中的一个字节码时，就可以对应查出字节码代表的是什么指令。
+
+前面提到过```<init>```方法的```code```属性，它的操作数栈和本地变量表的容量都为```0x0001```，字节码区域所占的空间长度为```0x0005```，根据字节码指令表翻译出来对应的字节码指令，字节码是```2a b7000ab1```，翻译过程如下：
+
+1. 读入2a，查得表0x2a对应的指令是aload_0，这个指令是将第0个 Slot中reference类型的本地变量推送到操作数栈顶。
+2. 读入b7，0xb7的指令为invokespecial，这条指令的作用是以栈顶的reference类型的数据所指向的对象作为方法接收者，调用此对象的实例构造器方法，private方法或者它的父类方法。
+3. 读入00 0a，这个是invokespecial，查询常量池，0x000A对应的常量是
+
+
+
+
+
 
 
 
