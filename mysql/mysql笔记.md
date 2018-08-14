@@ -6,10 +6,8 @@
 
 **查看mysql使用了哪些配置文件**
 
-进入到mysql的安装bin目录下面，执行下面的命令 
-
 ``` 
-./mysql --help|grep my.cnf
+mysql --help|grep my.cnf
 ```
 
 **查看mysql的数据存放在哪个目录下面**
