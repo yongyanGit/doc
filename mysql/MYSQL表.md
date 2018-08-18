@@ -175,7 +175,7 @@ User Records 即实际存储行记录，Free Space指空闲空间，当一条数
 
 #### Page Directory
 
-存放记录的相对位置，这些记录指针称为Slots(槽)，InnoDB并不是每个记录拥有一个槽，即一个槽中可能存放多个记录。Page Directory槽中的数据都是按照主键的顺序存放的。假如我们有('i','d','c','d','e','g','a','i')，则slots中的记录可能是('a','e','i')。
+Page Directory(页目录) 存放记录的相对位置。这些记录指针称为Slots(槽)或者Directory Sots(目录槽)，InnoDB并不是每个记录拥有一个槽，一个槽中可能属于多条记录，即通过page Directory查找到某条记录的相对位置是0xc0113，我们想要的记录不一定是在0xc01113，有可能在该位置的下一条。Page Directory槽中的数据都是按照主键的顺序存放的。假如我们有('i','d','c','d','e','g','a','i')，则slots中的记录可能是('a','e','i')。
 
 二叉查找是一个粗略的结果，所以InnoDB必须通过recorder header的next_record来继续查找相关记录。
 
@@ -204,21 +204,59 @@ PAGE_N_DIR_SLOTS=0x001a代表Page Directory有26个槽，每个槽占用两个�
 
 ![pagedirectory](../images/pagedirectory.png)
 
-PAGE_HEAP_TOP = 0x0dc0，堆中第一条记录的指针，也是空闲空间的开始位置，即0xc000+0x0dc0=0xcdc0
+PAGE_HEAP_TOP = 0x0dc0，堆中第一条记录的指针，也是空闲空间的开始位置，即0xc000+0x0dc0=0xcdc0。
 
 PAGE_N_HEAP=0X8066，当行记录格式是Compact时，初始值是0x0802，0x8066 -0x8002=0x64，代表页中国实际有100条记录。
 
 PAGE_GARBAGE=0X0000，代表删除的记录为0。
 
-PAGE_LAST_INSERT=0Xda5，表示页最后插入的位置的偏移量，即最后的插入位置是0xc000+0x0da5=0xcda5
+PAGE_LAST_INSERT=0Xda5，表示页最后插入的位置的偏移量，即最后的插入位置是0xc000+0x0da5=0xcda5。
 
-PAGE_direction=0x0002 插入方向，向右
+PAGE_DIRECTION=0x0002 插入方向，PAGE_DIRECTION的插入方向是向右。
 
 PAGE_N_DIRECTION=0x0063,表示一个方向连续插入记录的数量，此时表示连续插入了100条记录。
 
+PAGE_N_RECS=0x0064 ，表示该页的行记录数是100，它跟PAGE_N_HEAP比较，PAGE_N_HEAP包含两条伪行记录，因此它的值为0x8066。
 
+PAGE_LEVEL=0x00，代表该页为叶子节点。
 
+PAGE_INDEX_ID = 0x0000 0000 0000 01ba，索引ID。
 
+Page Header后面接着就是行记录了，InnoDB 存储引擎有2个伪纪录行，用来限定记录的边界，
 
+![pagedatainum](../images/pagedatainum.png)
 
+下面是整理的伪行记录：
+
+```
+//Infinum伪行记录
+01 00 02 00 1c //recorder header
+69 6e 66 69 6d 75 6d 00 
+//sumpremum 伪行记录
+05 00 0b 00 00 //recorder header
+73 75 70 72 65 6d 75 6d
+```
+
+infimum行记录的最后2个字节位001c表示下一个记录的位置的偏移量，即当前行记录内容的位置0xc063+0x001c，得到0xc07f。我们找到0xc07f位置的记录如下：
+
+![firstpagedata](../images/firstpagedata.png)
+
+```
+//第一条记录
+00 00 00 01 //因为建表时设定了主键，这里rowid即位列a的值为1
+00 00 00 51 6d eb //Transaction ID
+80 00 00 00 2d 01 10 // Roll Pointer
+64 64 64 64 64 64 64 64 64 64 //b 列的值 aaaaaaaaaaaaa
+
+```
+
+通过recorder header 最后两个字节记录的下一行记录的偏移量，我们 就可以得到该页中的所有的行记录，通过page header的PAGE_PREV，PAGE_NEXT就可以知道上一页和下一页的位置。
+
+最后再来分析Page Directory ,前面我们已经提到了从0x0000ffc4到0x0000fff7是当前页的Page Directory。 Page Directory是逆序存放的，每个槽2个字节，因此0x0063是最初行的开始位置即虚拟行infimum。0070就是最后一行记录的相对位置，也就是supremum的伪行记录。Page Directory槽中的数据都是按照主键的顺序存放的。前面提到，InnoDB的存储引擎是稀疏的，还需要通过recorder header的n_owned进一步判断。
+
+比如我们需要查找主键a为5的记录，通过二叉查找Page Directory 的槽，我们找到记录的相对位置在00e5处，找到记录的实际位置0xc0e5
+
+![pagedir](../images/pagedir.png)
+
+可以看到该条记录的主键是```00 00 00 04 ```即4，不是我们要找的5，但是我们看到它前面5个字节的record header,```04 00 28 00 22```，找到4～8位表示n_owned值部分，该值为4，表示有4条记录，通过record header的最后2个字节0x0022找到下一条记录的偏移位置，0xc107,这才是我们需要找的内容。
 
