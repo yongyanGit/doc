@@ -1,0 +1,25 @@
+<script src="https://cdn.jsdelivr.net/npm/vue/dist/vue.js"></script>
+
+
+<script>
+//我们的数据对象
+var data = {a:1}
+//将对象加入到Vue实例中
+var vm = new Vue({
+ data : data
+})
+
+//获取实例上的属性
+vm.a = data.a
+
+//设置属性的值，它也会影响原始数据
+vm.a = 2
+
+//反之亦然
+data.a=3
+
+//如果往实例中新添加一个属性，比如
+vm.b='hi'
+
+</script>
+
