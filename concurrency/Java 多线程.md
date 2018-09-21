@@ -241,7 +241,252 @@ public void run() {
     }
 ```
 
+一个简单的例子：
+
+```java
+public class StopThread {
+    private static User u = new User();
+    static class InnerCLass extends Thread{
+        @Override
+        public void run() {
+            while (true){
+                synchronized (u){
+                    int value = (int)(System.currentTimeMillis()/1000);
+                    u.setId(value);
+                    try {
+                        Thread.sleep(100);
+                    }catch (Exception e){
+                        e.printStackTrace();
+                    }
+                    u.setName(value);
+                }
+                Thread.yield();
+            }
+        }
+    }
+
+    static class ReadThread extends Thread{
+
+        @Override
+        public void run() {
+
+            while (true){
+
+                synchronized (u){
+                    if (u.getId() != u.getName()){
+                        System.out.println(u.getId()+":"+u.getName());
+                    }
+                }
+                Thread.yield();
+            }
+        }
+    }
+
+    public static void main(String[] args)throws Exception{
+
+        new ReadThread().start();
+        while (true){
+
+            Thread t = new InnerCLass();
+            t.start();
+            Thread.sleep(150);
+            t.stop();
+        }
+    }
+}
+
+class User{
+
+    private int id;
+
+    private int name;
+
+    public int getId() {
+        return id;
+    }
+
+    public int getName() {
+        return name;
+    }
+
+    public void setName(int name) {
+        this.name = name;
+    }
+
+    public void setId(int id) {
+        this.id = id;
+    }
+}
+```
+
+代码执行后的输出结果：
+
+```
+1537495908:1537495907
+1537495911:1537495910
+```
+
+可以看到虽然对id和name的赋值是在一个同步模块中执行，但是它们的值却会存在不一样的值。
+
+其实我们可以通过设置一个标志来停止线程，通过设置一个标志的true或false来中断线程，类似如下的代码：
+
+```java
+public void run() {
+  while (true){
+       if (flag){
+           System.out.println("exit......");
+           break;
+       }
+       synchronized (o){
+           System.out.print(System.currentTimeMillis());
+               ....
+      }
+ }
+ 
+ public void setStopFlag(boolean flag){
+        this.flag = flag;
+ }
+```
 
 
 
+#### 4. 线程中断
+
+线程中断并不会使线程立即退出，而是给线程发送一个通知，告知目标线程，有人希望它退出。在目标线程接到通知后如何处理，则完全有目标线程自行决定。
+
+与线程中断有关的，有三个方法：
+
+```java
+ public void interrupt()
+```
+
+通知目标线程中断，也就是设置中断标志位。如果此时线程已经（调用```wait()、sleep()、join()```）进入阻塞状态时，调用interrupt()方法，会抛出一个InterruptedException异常。
+
+如果线程阻塞在java.nio.channels.InterruptibleChannel的IO上，Channel将会被关闭，线程被设置为中断状态，并抛出ClosedByInterruptException异常。
+
+如果线程阻塞在java.nio.channels.Selector上，线程会被设置为中断状态，select方法会马上返回，类似调用wake up状态。
+
+```
+public static boolean interrupted()//判断是否被中断，但是会清除中断标志
+private native boolean isInterrupted//判断是否被中断
+```
+
+#### 5. Java中wait()与notify()
+
+> wait()与notify()必须在同步模块中执行，并且执行该方法的线程持有锁。
+
+* wait()：让当前持有锁的线程进入Object对象的等待队列，并且释放它持有的锁，在这个等待队列中，可能会有多个线程，因为系统运行多个线程同时等待某一个对象。
+* notify()：当调用notify()方法时，会从等待队列中随机的选择一个线程，并将其唤醒。注意这个选择不是公平的，并不是先等待的线程会优先被选择。当然当线程被唤醒后（Runnable)，并不是马上执行后续的代码，它还要去获取监视器（锁），只有成功获取后，才会继续往后执行。
+* notifyAll()：唤醒所有的线程
+
+一个简单的例子：
+
+```java
+public class ThreadDemo extends Thread{
+	
+	Object object = null;
+	private String name ;
+	public ThreadDemo(Object object,String name){
+		this.object = object;
+		this.name = name;
+	}
+	public void run()  {
+		
+		while(true){
+			synchronized(object){
+				try {
+					Thread.sleep(1000);
+					object.notify();//唤醒锁上的一个线程，被唤醒的线程处于就绪状态，等待被处理器调用
+					System.out.println(name +"-----run");
+					object.wait();//阻塞,释放锁
+				}catch (Exception e) {
+					e.printStackTrace();
+				}
+			} 
+		}
+	}
+	
+	
+	public static void main(String[] args) {
+		Object o = new Object();
+		ThreadDemo thread1 = new ThreadDemo(o, "thread1");
+		ThreadDemo thread2 = new ThreadDemo(o, "thread2");
+		thread1.start();
+		thread2.start();
+		
+	}
+```
+
+#### 6. Java Thread.sleep()方法
+
+程序执行sleep方法后，线程由运行状态进入阻塞状态，阻塞的时间由传入的时间决定。时间过期后，线程程变成就绪状态，等待cpu的调度。sleep()方法如果在同步模块中执行，不会是否锁资源。
+
+#### 7. Java Join()方法
+
+让主线程等待它的子线程死亡，即当一个线程中启动新的线程后，如果子线程调用了join()方法，主线程会等待子线程死亡后才会继续往下执行。
+
+一个简单的例子：
+
+```java
+public class ThreadJoin extends Thread{
+	
+	public void run() {
+		try{
+			System.out.println("join is start");
+			for(int i = 0;i<10;i++){
+				
+				Thread.sleep(1000);
+				System.out.println("thread is run:"+i);
+			}
+			System.out.println("join is end");
+		}catch(Exception e){
+			e.printStackTrace();
+		}
+	}
+
+	public static void main(String[] args) throws Exception {
+		
+		ThreadJoin threadJoin = new ThreadJoin();
+		threadJoin.start();
+		threadJoin.join();
+		System.out.println("main is end");
+	}
+
+}
+```
+
+执行结果：
+
+```
+join is start
+thread is run:0
+thread is run:1
+thread is run:2
+thread is run:3
+thread is run:4
+thread is run:5
+thread is run:6
+thread is run:7
+thread is run:8
+thread is run:9
+join is end
+main is end
+```
+
+可以从源码中看到其实join方法调用了wait方法，将当前拥有锁的线程（主线程）阻塞掉了。当子线程执行完之后，会调用notifyAll()方法，唤醒等待的线程。因此有一点需要注意：不要在应用程序中，在Thread对象实例上使用类似wait()或者notify()等方法，这很有可能会影响系统API工作，或者被系统API所影响。
+
+```java
+public final synchronized void join(long millis)
+    throws InterruptedException {
+        if (millis == 0) {
+            while (isAlive()) {//如果子线程还活着
+                wait(0);//主线程进入阻塞
+            }
+        } 
+    }
+```
+
+#### 8. Java Thread.yield()方法
+
+让线程从运行状态进入到就绪状态，让其它相同优先级的线程获取到执行权限，但是执行yield()方法后，其它线程不一定会获取到执行权限。如果yield()方法在同步模块中执行，不会释放锁。
 
