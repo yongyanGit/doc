@@ -354,7 +354,7 @@ public void run() {
 
 线程中断并不会使线程立即退出，而是给线程发送一个通知，告知目标线程，有人希望它退出。在目标线程接到通知后如何处理，则完全有目标线程自行决定。
 
-与线程中断有关的，有三个方法：
+与线程中断有关的方法：
 
 ```java
  public void interrupt()
@@ -366,9 +366,9 @@ public void run() {
 
 如果线程阻塞在java.nio.channels.Selector上，线程会被设置为中断状态，select方法会马上返回，类似调用wake up状态。
 
-```
+```java
 public static boolean interrupted()//判断是否被中断，但是会清除中断标志
-private native boolean isInterrupted//判断是否被中断
+private native boolean isInterrupted()//判断是否被中断
 ```
 
 #### 5. Java中wait()与notify()
@@ -489,4 +489,109 @@ public final synchronized void join(long millis)
 #### 8. Java Thread.yield()方法
 
 让线程从运行状态进入到就绪状态，让其它相同优先级的线程获取到执行权限，但是执行yield()方法后，其它线程不一定会获取到执行权限。如果yield()方法在同步模块中执行，不会释放锁。
+
+#### 9. 线程组
+
+如果在一个系统中线程数量很多，并且功能分配比较明确，就可以将相同的功能的线程放在一个线程组里面。
+
+```java
+public class ThreadGroupDemo implements Runnable {
+
+    public static void main(String[] args){
+
+        ThreadGroup threadGroup = new ThreadGroup("printGroup");
+        Thread t1 = new Thread(threadGroup,new ThreadGroupDemo(),"t1");
+        Thread t2 = new Thread(threadGroup,new ThreadGroupDemo(),"t2");
+        t1.start();
+        t2.start();
+        System.out.println(threadGroup.activeCount());
+        threadGroup.list();
+
+    }
+
+    @Override
+    public void run() {
+
+        String groupName = Thread.currentThread().getThreadGroup().getName()
+                +"-"+Thread.currentThread().getName();
+        System.out.println(groupName);
+
+    }
+}
+```
+
+#### 10. 守护线程
+
+Java线程分为两种线程：用户线程(User Thread)、守护线程(Daemon Thread)。
+
+用户线程可以认为是系统的工作线程，它会完成这个程序应该要完成的业务操作。如果用户线程全部结束，意味着这个程序实际上无事可做了。守护线程要守护的对象已经不存在了，那么整个程序就自然应该结束。因此，当一个Java应用内只有守护线程时，Java虚拟机就会自然退出。
+
+```java
+public class DaemonDemo {
+
+    public static class DaemonT extends Thread{
+
+
+        @Override
+        public void run() {
+
+            while (true){
+
+                System.out.println("i am alive");
+                try{
+                    Thread.sleep(1000);
+
+                }catch (Exception e){
+                    e.printStackTrace();
+                }
+
+            }
+
+        }
+    }
+
+
+    public static void main(String[] args)throws Exception{
+
+        Thread thread = new DaemonT();
+        thread.setDaemon(true);
+        thread.start();
+        Thread.sleep(2000);
+
+    }
+
+
+}
+```
+
+在上面的例子中，thread被设置为守护线程，系统中只有主线程main为用户线程，在主线程退出之前，守护线程会一直打印```i am alive```,当主线程休眠结束后，整个应用没有了用户线程，随之jvm会退出，守护线程也就退出了。
+
+另外如果通过Java线程池创建的线程，默认是用户线程。
+
+#### 11. 线程优先级
+
+Java线程中，优先级高的线程在竞争资源时会更有优势，更可能抢占资源，当然优先级高的线程也有可能会抢占失败。
+
+在Java中国使用1到10表示线程的优先级，数字越大则优先级越高。一般可以使用内置的三个静态变量来表示：
+
+```java
+/**
+     * The minimum priority that a thread can have.
+     */
+    public final static int MIN_PRIORITY = 1;
+
+   /**
+     * The default priority that is assigned to a thread.
+     */
+    public final static int NORM_PRIORITY = 5;
+
+    /**
+     * The maximum priority that a thread can have.
+     */
+    public final static int MAX_PRIORITY = 10;
+```
+
+在Java中我们可以通过调用Thread的```setPriority```方法来设置线程的优先级。
+
+
 
