@@ -86,7 +86,7 @@ public final void await() throws InterruptedException {
       }
 ```
 
-* ```addConditionWaiter```方法：将当前线程封装成一个Node对象
+* ```addConditionWaiter```方法：将当前线程封装成一个Node对象，并且将该节点添加到condition等待队列的末尾.
 
 ```java
  private Node addConditionWaiter() {
@@ -141,7 +141,7 @@ final long fullyRelease(Node node) {
 	boolean failed = true;
     try {
     	long savedState = getState();//获取锁的状态
-        if (release(savedState)) {
+        if (release(savedState)) {//完全释放锁
             failed = false;
                 return savedState;
          } else {
@@ -151,6 +151,41 @@ final long fullyRelease(Node node) {
         if (failed)
            node.waitStatus = Node.CANCELLED;
        }
+    }
+```
+
+* ```signal()```通知：将condition队列中的第一个线程移到同步等待队列中。
+
+```jAVA
+public final void signal() {
+	if (!isHeldExclusively())//如果不是当前线程持有锁，抛出异常
+        throw new IllegalMonitorStateException();
+    Node first = firstWaiter;
+    if (first != null)
+        doSignal(first);
+}
+
+
+ private void doSignal(Node first) {
+ 	do {
+     	if ( (firstWaiter = first.nextWaiter) == null)
+            lastWaiter = null;
+        first.nextWaiter = null;
+     } while (!transferForSignal(first) & (first = firstWaiter) != null);
+ }
+
+final boolean transferForSignal(Node node) {
+    //将待唤醒的线程的状态设置为初始状态    
+	if (!compareAndSetWaitStatus(node, Node.CONDITION, 0))
+        return false;
+	//将待唤醒的线程添加到同步等待队列，并返回它的前置节点
+    Node p = enq(node);
+    int ws = p.waitStatus;
+    //如果前置节点的状态为取消或它的节点的状态设置为SIGNAL失败，直接唤醒待唤醒的节点；
+    //如果前置节点状态设置成功，则当前节点等待它的前置节点来唤醒它。
+    if (ws > 0 || !compareAndSetWaitStatus(p, ws, Node.SIGNAL))
+        LockSupport.unpark(node.thread);
+        return true;
     }
 ```
 
