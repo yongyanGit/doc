@@ -1,0 +1,121 @@
+### JVM执行方法调用
+
+#### 重写与重载
+
+在Java程序中，如果一个类中出现多个名字相同，并且参数类型相同的方法，那么它无法通过编译。也就是在正常情况下，如果我们想在同一个类中定义名字相同，那么他们的参数类型必须不同。这些方法之间的关系称之为重载。
+
+重载的方法在编译过程中即可完成识别。Java编译器会根据传入参数的声明类型来选取重载方法，选取的过程分为三个阶段：
+
+* 在不考虑对基本类型的自动装拆箱，以及可变长参数的情况下选取重载方法。
+* 如果第一阶段没有找到适配的方法，那么在允许自动装拆箱，但不允许可变长参数的情况下选取重载方法。
+* 如果在第2个阶段中没有找到合适的方法，那么在允许自动拆箱已经可变参数的情况下选取重载方法。
+
+```java
+void invoke(Object obj, Object... args) { ... }
+void invoke(String s, Object obj, Object... args) { ... }
+
+invoke(null, 1);    // 调用第二个 invoke 方法
+invoke(null, 1, 2); // 调用第二个 invoke 方法
+invoke(null, new Object[]{1}); // 只有手动绕开可变长参数的语法糖，
+                               // 才能调用第一个 invoke 方法
+```
+
+如上：当调用invoke()方法时，当传入null时，它既可以匹配第一个方法中声明为Object的形式的参数，也可以匹配第二个方法中声明为String形式参数。由于String是Object的子类，因此Java编译器会认为第二个参数更为贴切。
+
+如果子类中定义了与父类中非私有方法同名的方法，而且这两个方法参数类型相同，如果这两个方法是静态的，那么子类中的方法隐藏了父类中的方法，如果这两个方法都不是静态的，且都不是私有的，那么子类的方法重写父类中的方法。
+
+#### JVM的静态绑定和动态绑定
+
+Java虚拟机识别方法的关键在于类名、方法名以及方法描述符。方法描述符由参数类型以及返回类型所构成。如果在同一个类中同时出现多个名字相同且描述符也相同，那么Java虚拟机会在类的验证阶段报错。
+
+其实在JVM中不会限制名称相同和参数类型相同，但返回类型不同的方法出现在同一个类中，因为对JVM来说，字节码所附带的方法描述符包含了返回类型，它能够准确的识别目标方法。
+
+Java虚拟机关于重写的判断同样基于方法描述符，即子类定义了与父类中非私有、非静态方法同名的方法，那么只有当这两个方法的参数类型以及返回类型一致，Java虚拟机才判断为重写。
+
+Java虚拟机中的静态绑定指解析时便能够直接识别目标方法的情况，而动态绑定则指需要在运行过程中根据调用者的动态类型来识别目标方法的情况。具体来说，Java字节码中与调用相关的指令共五种：
+
+* invokestatic：用于调用静态方法
+* invokespecial：用于调用私有实例方法、构造器、以及使用super关键字调用父类的实例方法或者构造方法，和所实现接口的默认方法
+* invokevirtual：用于调用非私有实例方法
+* invokeinterface：用于调用接口方法
+* invokedynamic：用于调用动态方法
+
+如下一个例子：
+
+```java
+//客户
+public interface Customer {
+    boolean isVIP();
+}
+//商户
+public class Merchant {
+	//打折
+    public double discount(double originalPrice,Customer customer){
+        return originalPrice*0.8d;
+    }
+}
+//某商家
+public class Profiteer extends  Merchant {
+	//重写打折接口
+    @Override
+    public double discount(double originalPrice, Customer customer) {
+
+        if (customer.isVIP()){
+            return originalPrice * specialDiscount();
+        }else {
+            return super.discount(originalPrice,customer);
+        }
+    }
+    //杀熟
+    public static double specialDiscount(){
+        return new Random().nextDouble()+0.8d;
+
+    }
+}
+```
+
+在Profiteer类中，我们重写了Merchant的discount接口，在这个方法中，我们首先会先调用customer的isVIP方法，该调用会被为invokeinterface指令。
+
+如果客户是VIP，那么我们会调用specialDiscount方法，它是一个静态方法，该调用会编译成invokestatic指令。如果不是VIP，我们会通过super关键字调用父类的discount方法，该调用会被编译成invokespecial指令。
+
+在specialDiscount方法中，我们会调用Random类的构造器，该调用会被编译成invokespecial指令，然后我们会以这个新键的Random对象为调用者，调用Random类的nextDouble方法，该调用会编译成invokevirutal指令。
+
+对于invokestatic以及invokespecial而言，Java虚拟机能够直接识别具体的目标方法。
+
+而对于invokevirtual和invokeinterface，绝大部分情况下，虚拟机需要在执行的过程中，根据调用者的动态类型来确定具体的目标方法。
+
+
+
+#### 调用指令的符号引用
+
+在编译的过程中，我们并不知道目标方法的具体内存地址，Java编译器会暂时用符号引用来表示该目标方法。这个符合引用包括目标方法所在的类或者接口的名字，以及目标方法的方法名称和方法描述符。
+
+符号引用存储在class文件中的常量池之中。根据目标方法是否为接口，这些引用可以分为接口符号引用和非接口符号引用。例如：用"java-v"打印某个类的常量池：
+
+```
+
+1: invokeinterface #2,  1            // InterfaceMethod Customer.isVIP:()Z
+2: ifeq          15
+3: dload_1
+4: invokestatic  #3                  // Method specialDiscount:()D
+```
+
+例如在Profiteer常量池中，第1行所示为接口符号，客户的isVIP()方法；第4行是非接口方法引用，静方法specialDiscount。
+
+在执行使用符号引用字节码前，Java虚拟机需要解析这些符号引用，并替换成实际引用。
+
+对于非接口引用，假定该符号引用指向的类为C，则Java虚拟机会按照如下步骤进行查找：
+
+* 在C中查找符合名字以及描述符的方法
+* 如果没有找到，在C的父类中继续搜索，直至Object类。
+* 如果没有找到，则在C所直接实现或者间接实现的接口中搜索，这一步搜索得到的目标方法必须是非私有、非静态的。并且、如果目标方法在间接实现的接口中，则需满足C与该接口之间没有其它符合条件的目标方法。如果有多个符合条件的目标方法，则任意返回其中一个。
+
+从这个解析算法可以看出，子类的静态方法会隐藏父类中同名、同描述符的静态方法。
+
+对于接口符号引用，假定该符号引用指向所指向的接口为I，则Java虚拟机会按照如下步骤进行查找：
+
+* 在I中查找符合名字已经描述符的方法
+* 如果没有找到，在Object类中的公有实例方法中搜索
+* 如果没有找到，则在I的超链接口搜索，这一部与非接口符号引用步骤3要求一致。
+
+经过上述的解析步骤之后，符号引用会被解析成实际引用。对于可以静态绑定的方法调用而言，实际引用是一个指向方法的指针。
