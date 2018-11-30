@@ -66,4 +66,75 @@ docker ps    #测试docker命令是否可以使用sudo正常使用
 登录harbor
 docker login  -u yanyong@seaeverit.com -p A1991100598yan https://reg.evercenter.cn/harbor
 
+1、mvn clean install -DskipTests
+
+1、 sh stopMicrosoftService_back20180718.sh
+
+2、 sh startMicrosoftService_back20180718.sh
+
+docker-compose up -d
+docker-compose down
+
+
+
+docker pull reg.evercenter.cn/eid-service/eid-service:latest
+
+docker tag reg.evercenter.cn/eid-service:v1.1 reg.evercenter.cn/eid-service/eid-service:latest
+
+docker push reg.evercenter.cn/eid-service/eid-service:latest
+
+docker ps
+docker stop <containerid>
+docker rm <containerid>
+docker rmi <imageid>
+
+docker logs -f -t --tail 10
+
+
+
+docker exec -it oradb_oracle_1 bash
+
+su - oracle
+
+sqlplus / as sysdba
+
+导入数据
+
+1. 先创建表空间
+
+create tablespace libsys datafile '/u02/app/oracle/oradata/libsys/libsys.dbf' size 6500m autoextend on next 50m;
+
+添加用户
+
+2. create user c##libsys identified by libsys default tablespace libsys;
+
+授权
+
+2. grant connect,resource,dba to c##libsys;
+
+
+
+
+
+```
+sqlplus /nolog
+ conn tiger/scott
+ conn tiger/scott@172.16.0.1/orcl
+```
+
+1.lsnrctl start  
+会看到启动成功的界面;
+
+1.lsnrctl stop  
+停止监听器命令.
+
+1.lsnrctl status  
+
+
+
+
+
+mvn install:install-file -Dfile=//home/yanyong/worksapce/application/oracleclient/ojdbc8.jar -DgroupId=com.oracle.jdbc -DartifactId=ojdbc8 -Dversion=12.2.0.1 -Dpackaging=jar
+
+
 
