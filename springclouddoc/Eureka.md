@@ -51,6 +51,32 @@
    192.168.72.103:eureka-server:1111
    ```
 
+   我们可以从源码中看出它组装instanceId的逻辑
+
+   ```java
+   public static String getDefaultInstanceId(PropertyResolver resolver, boolean includeHostname) {
+   		String vcapInstanceId = resolver.getProperty("vcap.application.instance_id");
+   		if (StringUtils.hasText(vcapInstanceId)) {
+   			return vcapInstanceId;
+   		}
+
+   		String hostname = null;
+   		if (includeHostname) {
+   			hostname = resolver.getProperty("spring.cloud.client.hostname");
+   		}
+   		String appName = resolver.getProperty("spring.application.name");
+
+   		String namePart = combineParts(hostname, SEPARATOR, appName);
+
+   		String indexPart = resolver.getProperty("spring.application.instance_id",
+   				resolver.getProperty("server.port"));
+
+   		return combineParts(namePart, SEPARATOR, indexPart);
+   	}
+   ```
+
+   首先是获取hostname和appname，当这两个参数都不为空，则会用冒号将这两个参数组装起来 ，但是如果有一个参数为空的情况下，则会返回另一个不为空的参数，即得到namePart。接着就是如果我们有设置```spring.application.instance_id```则会将这个参数与namePart组合起来，否则就用端口号替代。
+
    我们可以通过如下来自定义实例ID
 
    ```
