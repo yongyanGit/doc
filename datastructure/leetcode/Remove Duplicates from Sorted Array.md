@@ -8,8 +8,11 @@ Do not allocate extra space for another array, you must do this by **modifying t
 
 ```java
 public static int removeDuplicates(int[] arrays){
-        int index = arrays[0];
+
+        int index = 0;
+
         for(int i = 1;i<arrays.length;i++){
+
             if (arrays[i] != arrays[index]){
 
                 if (i -index > 1){
@@ -20,8 +23,10 @@ public static int removeDuplicates(int[] arrays){
                 arrays[index] = arrays[i];
 
             }
+
         }
-        return arrays.length;
+
+        return index +1;
     }
 ```
 
