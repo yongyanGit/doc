@@ -54,9 +54,21 @@ response cache参数
 
 Eureka Server 为了提升自身REST API接口的性能，提供了两个缓存：一个基于ConcurrentMap的readOnlyCacheMap，一个是基于Guava Cache的readWriteCacheMap.
 
-| 参数              | 默认值 | 说明 |
-| ----------------- | ------ | ---- |
-| eureka.server.use |        |      |
-|                   |        |      |
-|                   |        |      |
+| 参数                                                    | 默认值  | 说明                                                         |
+| ------------------------------------------------------- | ------- | ------------------------------------------------------------ |
+| eureka.server.use-read-only-response-cache              | true    | 是否使用只读的response-cache                                 |
+| eureka.server.response-cache-update-interval-ms         | 30*1000 | 设置CacheUpdateTsk的调度时间间隔，用于从readWrite-CacheMap更新数据到readOnlyCacheMap。仅仅在eureka.server.use-read-only-response-cache为true的时候才生效 |
+| eureka.server.response-cache-auto-expiration-in-seconds | 180     | 设置readWriteCacheMap的expireAfter参数，指定写入多长时间后长期。 |
+
+http参数
+
+Eureka Server 需要与其它peer节点进行通信，复制实例参数，其底层使用httpClient，
+
+| 参数                                                    | 默认值 | 说明                                           |
+| ------------------------------------------------------- | ------ | ---------------------------------------------- |
+| eureka.server.peer-node-connect-timeout-ms              | 200    | 连接超时                                       |
+| eureka.server.peer-node-read-timeout-ms                 | 200    | 读超时时间                                     |
+| eureka.server.peer-node-total-connections               | 1000   | 连接池最大活动连接数(MaxTotal)                 |
+| eureka.server.peer-node-total-connections-per-host      | 500    | 每个host能使用的最大连接数(DefaultMaxPerRoute) |
+| eureka.server.peer-node-connection-idle-timeout-seconds | 30     | 连接池中连接的空闲时间(connectionIdleTimeout)  |
 
