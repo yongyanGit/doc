@@ -28,6 +28,7 @@ nohub java -jar xxxx.jar&
 
 
 1、mvn clean install -DskipTests
+ docker run -p 9001:9001 --name eid-service -d reg.evercenter.cn/eid-service:v1.3
 
 1、 sh stopMicrosoftService_back20180718.sh
 
