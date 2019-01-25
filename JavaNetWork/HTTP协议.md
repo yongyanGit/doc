@@ -22,6 +22,22 @@ HTTP的报文大概分为三大部分。第一部分是请求行，第二部分�
 
 请求行下面就是首部字段，首部是key value，通过冒号分割。
 
+通用首部字段
+
+1. Cache-Control：能够控制缓存行为，指令的参数是可选的，多个指令之间通过","分隔
+
+* 缓存请求指令
+
+![cache](../images/net/requestCache.png)
+
+* 缓存响应指令
+
+![cache](../images/net/responseCache.png)
+
+ 
+
+
+
 请求首部字段：
 
 1. Accept：告诉WEB服务器，用户代理能够处理的媒体类型，以及媒体类型的相对优先级。```*/*```表示任何类型 (text/html)。
