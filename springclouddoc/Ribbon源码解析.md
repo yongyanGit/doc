@@ -44,21 +44,8 @@ public class LoadBalancerAutoConfiguration {
 	@LoadBalanced
 	@Autowired(required = false)
 	private List<RestTemplate> restTemplates = Collections.emptyList();
-
-    //对RestTemplate进行初始化，设置拦截器
-	@Bean
-	public SmartInitializingSingleton loadBalancedRestTemplateInitializerDeprecated(
-		final ObjectProvider<List<RestTemplateCustomizer>> restTemplateCustomizers) {
-		return () -> restTemplateCustomizers.ifAvailable(customizers -> {
-            for (RestTemplate restTemplate : LoadBalancerAutoConfiguration.this.restTemplates) {
-                for (RestTemplateCustomizer customizer : customizers) {
-                    customizer.customize(restTemplate);
-                }
-            }
-        });
-	}
-
-	
+    
+//为restTemplate设置拦截器
 @Configuration
 @ConditionalOnMissingClass("org.springframework.retry.support.RetryTemplate")
 	static class LoadBalancerInterceptorConfig {
@@ -70,7 +57,7 @@ public class LoadBalancerAutoConfiguration {
 			return new LoadBalancerInterceptor(loadBalancerClient, requestFactory);
 		}
 	
-    //定义RestTemplateCustomizer实例
+    //设置拦截器
 	@Bean
 	@ConditionalOnMissingBean
 	public RestTemplateCustomizer restTemplateCustomizer(
