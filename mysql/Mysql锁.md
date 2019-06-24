@@ -14,12 +14,35 @@ InnoDB存储引擎会在行级别上对表数据上锁(MyISAM引擎是表锁，�
 | x    | 冲突 | 冲突 |
 | s    | 冲突 | 兼容 |
 
-InnoDB存储引擎支持一种额外的锁方式，我们称之为意向锁。意向锁是表级别的锁，其设计的主要目的主要是为了在下一个事务中揭示下一行将被请求的锁的类型。
+InnoDB存储引擎支持一种额外的锁方式，我们称之为意向锁。意向锁是表级别的锁，其设计的主要目的主要是为了在一个事务中揭示下一行将被请求的锁的类型。
 
 * 意向共享锁(IS Lock)，事务想要获得一个表中某几行的共享锁。
 * 意向排他锁(IX Lock)，事务想要获得一个表中某几行的排他锁。
 
-因为InnoDB存储引擎支持的是行级别的锁，所以意向锁其实不会阻塞除却全表扫意外的任何请求。
+表级别锁的兼容性如下：
+
+|      | X    | IX   | S    | IS   |
+| ---- | ---- | ---- | ---- | ---- |
+| X    | 冲突 | 冲突 | 冲突 | 冲突 |
+| IX   | 冲突 | 兼容 | 冲突 | 兼容 |
+| S    | 冲突 | 冲突 | 兼容 | 兼容 |
+| IS   | 冲突 | 兼容 | 兼容 | 兼容 |
+
+注：S 、X是表级别的独占锁和共享锁。
+
+意向锁不会阻塞除却全表请求(lock table t write)以外的任何请求。如lock table write 是请求获取一个表级别的排它锁，这会被IS或者IX阻塞。使用意向锁来支持多粒度锁。
+
+```sql
+# session A
+begin;
+select * from t where a = 1 for update;//给请求的行加一个x锁
+
+# session B
+begin;
+lock table t write; //session A释放锁之前，SessionB会一直阻塞
+```
+
+如是，当session A 需要获取a=1行的X锁，但是session A在获取行锁前，它必须获取t表的IX锁，不存在冲突。session B获取t的全表x锁，但是session B发现t表已经被设置了IX锁，因此session B被阻塞。假设不存在意向锁，session B需要遍历t中的所有行来确保没有被锁住的行，显然这种效率会非常低。
 
 在InnoDB Plugin之前，我们只能通过SHOW FULL PROCESSLIST、SHOW ENGINE INNODB STATUS等命令来查看当前数据库的请求，然后再判断当前事务中锁的情况。
 
@@ -218,8 +241,8 @@ select max(auto_inc_col) from t for update
 从5.1.22版本开始，InnoDB存储引擎提供了一种轻量级的自增长实现机制，该存储引擎提供了一个参数innodb_autoinc_lock_mode,默认值为1。
 
 * innodb_autoinc_lock_mode=0 即通过表锁的AUTO-INC Locking方式。
-* innodb_autoinc_lock_mode＝1 这是该参数的默认值。对于"Simple insert"(插入前就确定插入行数的语句，如：insert，replace)，该值会用互斥量（mutex）去对内存中的计数器进行累加。对于"Bulk inserts"(插入前不确定插入行数的语句，如：insert ...select,load data)还是使用传统表锁的AUTO-INC Locking方式。并且如果依据使用了AUTO-INC Locing的方式产生增长的值，而这时再进行"Simple inserts"的操作时，还是需要等待AUTO-INC Locking的释放。
-* innodb_autoinc_lock_mode＝2 对于所有的自增长都是通过互斥，而不是AUTO-INC Locking的方式。这是最高性能的方式，但是因为并发插入的存在，自增长的值可能不是连续的。此外基于Statement-Base Replication 会出现问题。
+* innodb_autoinc_lock_mode＝1 这是该参数的默认值。对于"Simple insert"(插入前就确定插入行数的语句，如：insert，replace)，该值会用互斥量（mutex）去对内存中的计数器进行累加。对于"Bulk inserts"(插入前不确定插入行数的语句，如：insert ...select,load data)还是使用传统表锁的AUTO-INC Locking方式。并且如果已经使用了AUTO-INC Locing的方式产生增长的值，而这时再进行"Simple inserts"的操作时，还是需要等待AUTO-INC Locking的释放。
+* innodb_autoinc_lock_mode＝2 对于所有的自增长都是通过互斥量(mutex)，而不是AUTO-INC Locking的方式。这是最高性能的方式，但是因为并发插入的存在，自增长的值可能不是连续的。此外基于Statement-Base Replication 会出现问题。
 
 
 
@@ -240,6 +263,44 @@ InnoDB存储引擎中有3种行锁的算法设计，分别是：
 * Next-Key Lock :Gap Lock+Record Lock，锁定一个范围，并且锁定记录本身。
 
 Record Lock总是会去锁住索引记录。如果InnoDB存储引擎表建立的时候没有设置任何一个索引，这时InnoDB 存储引擎会使用隐式的主键来进行锁定。
+
+间隙锁保证某个间隙内的数据在锁定情况下不会发生任何变化，比如mysql默认隔离级别下的可重复读。
+
+当使用唯一索引来搜索唯一行时，不需要间隙锁定，如下：
+
+```sql
+select * from t where a = 3 for update;//a 是表t的主键，不会使用间隙锁
+```
+
+如果上面的a没有建立索引或者非唯一索引，则会产生间隙锁。如下我们创建了一个表：
+
+```sql
+create table g (name varchar(10),i int,primary key(name),index idx_i(i)) engine=InnoDB;
+
+insert into g (name,i) values ('a',5);
+insert into g (name,i) values ('b',8);
+insert into g (name,i) values ('c',10);
+insert into g (name,i) values ('d',10);
+insert into g (name,i) values ('e',11);
+insert into g (name,i) values ('f',15);
+
+# session A
+begin;
+update g set i=i+100 where i = 10;
+
+#session B
+insert into g(name,i) values("z",8);
+```
+
+mysql中的数据是按照 B+树来排列的，所以它是有序的，我们大概列出它的顺序：
+
+```('a',5)、('b',8)、('c',10)、('d',10)、('e',11)、('f',15);```
+
+我们在session A 中执行update方法，由于i是非唯一索引，并且索引在mysql中是有序的，所以它会锁定(8,10)和(10,11)。然后我们在session B中插入("z",8)时，由于和(8,10)重叠了，所以会话B会进入阻塞。
+
+间隙的范围是向下寻找最靠近检索条件的记录值A作为坐区间，向上寻找最靠近检索条件的记录值B作为右区间，即锁定的间隙为(A,B)。
+
+需要注意的是当列上没有索引时，sql会进行全表扫描过滤，因此每条记录都会被加上X锁。但是为了效率考虑，对于不满足条件的记录，会在判断后放锁，最终持有的是满足条件的记录上的锁。
 
 InnoDB对于行的查询都是采用Next-Key Lock这种锁定算法，对于不同的查询语句，可能设置共享和排他的 Next-Key Lock。
 
@@ -281,20 +342,7 @@ mysql> insert into t select 5;
 
 在会话A中，无论插入5还是6，都会被锁定。因为在Next-Key Lock算法下，锁定的是(-%,6)这个区间的所有数值。但是插入9这个数值是可以的，因为该记录不在锁定的范围内。
 
-对于单值的索引查询，不需要用到Gap Lock，只要加一个Record Lock即可。
-
-```
-#session A
-mysql> begin;
-select * from t where a = 7;
-
-#session B
-begin;
-mysql> insert into t select 6;
-Query OK, 1 row affected (0.00 sec)
-```
-
-如上会话B可以插入6。需要注意的是上面两个例子都是在InnoDB 的默认配置下，即事务的隔离级别为REPEATABLE READ的模式下，在该模式下，Next-Key Lock算法是默认的行记录锁定算法。
+Next-Key Lock算法是默认的行记录锁定算法。
 
 #### 锁问题
 
@@ -349,7 +397,7 @@ mysql> insert into t select 3;
 
 如上，session A可以读到session B中未提交的数据，即产生来脏读，违反了事务的隔离性。目前大部分数据库的隔离级别至少设置成READ COMMITTED。InnoDB存储引擎默认的事务隔离级别为READ REPEATABLE。
 
-3. 不可重复读
+3. 不可重复读(虚读)
 
 不可重复读是指在一个事务内多次读同一数据，在这个事务还没有结束时，另一个事务也访问同一数据，那么在第一个事务的两次读取数据之间，由于第二个事务的修改，导致第一个事务两次读到的数据可能是不一样的。这样就发生了在一个事务内两次读到的数据是不一样的，因此称为不可重复读。
 
@@ -358,6 +406,8 @@ mysql> insert into t select 3;
 一般来说，不可重复读的问题是可以接受的，因为其读到的是已经提交的数据，本身并不会带来很大的问题。因此很多数据库厂商(Oracle、SQL Server)将其数据库事务的默认级别设置为READ COMMMITTED，这种隔离级别下允许不可重复读。
 
 在InnoDB存储引擎中，通过使用Next-Key Lock算法来避免不可重复读的问题。在Next-Key Lock 算法下，对于索引的扫描，不仅仅是锁住扫描到的索引，而且还锁住这些索引覆盖的范围。因此对于这个范围内的插入都是不允许的，这样就避免另外的事务在这个范围内插入数据导致的不可重复读的问题。
+
+指事务A读取与搜索条件相匹配的若干行
 
 #### 阻塞
 
@@ -424,10 +474,3 @@ InnoDB 存储引擎并不会回滚大部分的错误异常，但是死锁除外�
 
 
 #### 锁升级
-
-
-
-
-
-
-

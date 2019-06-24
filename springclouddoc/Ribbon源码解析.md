@@ -113,11 +113,13 @@ public class LoadBalancerInterceptor implements ClientHttpRequestInterceptor {
 
 从上面可以看到被@LoadBalanced注解修饰的RestTemplate对象向外发起HTTP请求时，会被LoadBalancerInterceptor类的intercept函数所拦截。我们在请求时，采用了服务名称作为host,所以直接从HttpRequest的URI对象中通过getHost就可以拿到服务名称，然后调用execute函数，根据服务名来选择实例，并发起实际的请求。
 
-在拦截器中执行execute方法时，会创建一个LoadBalancerRequest匿名对象，在这个方法中会创建一个ServiceRequestWrapper对象，在这个对象中重写了getURI方法，在这个重写的方法会根据从负载均衡器中获取的服务实例来构建正确的URI。
+在拦截器中执行execute方法时，会创建一个LoadBalancerRequest匿名对象，在这个方法中会创建一个ServiceRequestWrapper对象，在这个对象中重写了getURI方法，在这个重写的方法会根据从负载均衡器中获取的服务实例来构建正确的URI(即用ip地址、端口替换掉服务ID)。
 
 ```java
 public LoadBalancerRequest<ClientHttpResponse> createRequest(final HttpRequest request,
 final byte[] body, final ClientHttpRequestExecution execution) {
+    //创建了一个匿名对象，LoadBalancerRequest.apply(ServiceInstance instance)
+    //Ribbon通过负载均衡查询到具体的实例对象(ServiceInstance)，然后传递给apply方法
 	return instance -> {
         //将request对象封装进ServiceRequestWrapper,它重写了getURI方法
     	HttpRequest serviceRequest = new ServiceRequestWrapper(request, instance, loadBalancer);
@@ -158,7 +160,7 @@ public ClientHttpResponse execute(HttpRequest request, byte[] body) throws IOExc
 				StreamUtils.copy(body, delegate.getBody());
 			}
 		}
-        //发送http请求
+        //执行
 		return delegate.execute();
 	}
 }

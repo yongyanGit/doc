@@ -266,34 +266,17 @@ public ServerList<?> ribbonServerList(IClientConfig config, Provider<EurekaClien
 	if (this.propertiesFactory.isSet(ServerList.class, serviceId)) {
 			return this.propertiesFactory.get(ServerList.class, config, serviceId);
 		}
+    //覆盖getInitialListOfServers和getUpdatedListOfServers方法
 		DiscoveryEnabledNIWSServerList discoveryServerList = new DiscoveryEnabledNIWSServerList(
 				config, eurekaClientProvider);
+    //覆盖getInitialListOfServers和getUpdatedListOfServers方法，但是它内部具体实现由上面的DiscoveryEnabledNIWSServerList来实现。
 		DomainExtractingServerList serverList = new DomainExtractingServerList(
 				discoveryServerList, config, this.approximateZoneFromHostname);
 		return serverList;
 	}
 ```
 
-DomainExtractingServerList实现
-
-```java
-//EurekaRibbonClientConfiguration
-@Bean
-@ConditionalOnMissingBean
-public ServerList<?> ribbonServerList(IClientConfig config, Provider<EurekaClient> eurekaClientProvider) {
-	if (this.propertiesFactory.isSet(ServerList.class, serviceId)) {
-		return this.propertiesFactory.get(ServerList.class, config, serviceId);
-	}
-	DiscoveryEnabledNIWSServerList discoveryServerList = new DiscoveryEnabledNIWSServerList(
-				config, eurekaClientProvider);
-    //创建一个DomainExtractingServerList对象
-		DomainExtractingServerList serverList = new DomainExtractingServerList(
-				discoveryServerList, config, this.approximateZoneFromHostname);
-		return serverList;
-	}
-```
-
-在DomainExtractingServerList中创建了一个ServerList list，同时自己实现了getInitialListOfServers和getUpdatedListOfServers方法，但是在这两个方法内部其实是委托给了ServerList list 来实现具体的操作。ServerList由构造函数传入即它的实现类：DiscoveryEnabledNIWSServerList.
+在DomainExtractingServerList中实现了getInitialListOfServers和getUpdatedListOfServers方法，但是在这两个方法内部其实是委托给了ServerList (DiscoveryEnabledNIWSServerList)来实现具体的操作:
 
 ```java
 public class DomainExtractingServerList implements ServerList<DiscoveryEnabledServer> {
@@ -792,7 +775,7 @@ BaseLoadBalancer getLoadBalancer(String zone) {
 
 ```java
 public Server chooseServer(Object key) {
-    //只有党负载均衡器中维护的实例所属的Zone区域的个数大于1的时候才会执行这里的选择策略，否则还是将使用父类的实现
+    //只有负载均衡器中维护的实例所属的Zone区域的个数大于1的时候才会执行这里的选择策略，否则还是将使用父类的实现
         if (!ENABLED.get() || getLoadBalancerStats().getAvailableZones().size() <= 1) {
             logger.debug("Zone aware logic disabled or there is only one zone");
             return super.chooseServer(key);

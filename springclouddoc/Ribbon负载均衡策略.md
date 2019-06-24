@@ -616,4 +616,4 @@ public List<Server> getEligibleServers(List<Server> servers, Object loadBalancer
   2、 过滤后的实例比例 > 最小过滤百分比（minimalFilteredPercentage，默认是0）
 
 
-* ​
+​

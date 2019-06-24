@@ -1,8 +1,8 @@
 #### Kafka消费者
 
-Kafka消费者从属于消费这群组，一个群组里面的消费者订阅的是同一个主题，每个消费者接收主题一部分分区的消息。
+消费者使用一个消费者组名来标记自己，topic的每条消息都只会被发送到每个订阅它的消费者组的一个消费者实例上。
 
-假设主题T1有四个分区，我们创建一个了消费者C1，它是群组G1里唯一的消费者，则消费者C1将收到主题T1全部4个分区的消息。
+假设主题T1有四个分区，我们创建一个了"消费者1"，它是群组"消费者群组1"里唯一的消费者，则消费者1将收到主题T1全部4个分区的消息。
 
 ![oneconsumer](../images/kafka/consumer1.png)
 
@@ -47,6 +47,20 @@ Kafka消费者从属于消费这群组，一个群组里面的消费者订阅的
 ```
 
 消费者的轮询不只是获取数据那么简单，在第一次调用新消费者的poll()方法时，它会负责查找GroupCoordinator，然后加入到群组，接受分配的分区。如果发生了再均衡，整个过程也是在轮询期间进行的，同时心跳也是从轮询里发出去的。所以我们要确保在轮询期间所做的任何工作都应该尽快完成。
+
+#### consumer 脚本命令
+
+Kafka自带控制台consumer脚本用于日常调试验证。kafka-console-consumer脚本常见的使用参数如下：
+
+* —bootstrap-servers ：指定Kafka broker列表，多台broker 则用逗号分割。
+* --topic：指定要消费的topic名。
+* —from-beginning：是否指定从头消费。
+
+#### 消息轮询
+
+新版本Java consumer是一个多线程或者是一个双线程的Java进程。创建KafkaConsumer称为用户主线程，同时consumer在后台会创建一个心跳线程，该线程称为后台心态线程。KafkaConsumer的poll方法在用户主线程中运行，而所有的消费逻辑包括coordinator的协调、消费者组的rebalance以及数据的获取都会在主逻辑poll方法的一次调用中被执行，因此仔细调优这个poll方法相关的各种处理超时时间参数至关重要。
+
+
 
 #### 消费者配置
 
@@ -94,7 +108,7 @@ heartbeat.interval.ms指定了poll()方法向协调器发送心跳的频率，he
 
 8. max.poll.records
 
-用来控制单次调用call()方法能够返回的记录数量。
+用来控制单次调用poll()方法能够返回的记录数量。比较极端的做法是设置该参数为1，那么每次poll只会返回1条消息。
 
 9. receive.buffer.bytes和send.buffer.bytes
 
@@ -104,6 +118,18 @@ socket在读写数据时用到的TCP缓冲区也可以设置大小。如果它�
 
 指定消费者是否自动提交偏移量，默认是true。为了防止数据重复和丢失，可以把它设置为false,由自己控制何时提交偏移量。可以通过auto.commit.interval.ms属性来控制提交的频率.
 
+11. max.poll.interval.ms
+
+这个参数就是用于设置消息处理逻辑的最大时间。假设用户的业务场景中消息处理逻辑是把消息“落地”到远程数据库，且这个过程平均处理时间是2分钟，那么用户仅需要将max.poll.interval.ms设置为稍稍大于2分钟的值即可。
+
+12. connecttions.max.idle.ms
+
+Kafka会定期地关闭空闲Socket连接导致下次comsumer处理请求时需要重新创建连向broker的socket连接，当前默认值是9 分钟。
+
+#### 偏移量（offset）
+
+这里的offset指代是consumer端的offset，与分区日志中的offset是不同的含义。每个consumer实例都会为它消费的分区维护属于自己的位置信息来记录当前消费了多少条信息
+
 #### 提交与偏移量
 
 消费者通过偏移量来标志生产者写入kafka但还没有被消费过的记录，消费者定时往一个叫做_consumer_offset的特殊主题发送消息，消息里面包含每个分区的偏移量。如果消费者一直处于运行状态，那么偏移量就没有什么用处。如果消费者发生崩溃或者新的消费者加入群组，就会触发再均衡，完成再均衡之后，每个消费者可能分配到新的分区，需要读取每个分区最后一次提交的偏移量，然后从偏移量指定的地方继续处理。
@@ -111,6 +137,16 @@ socket在读写数据时用到的TCP缓冲区也可以设置大小。如果它�
 如果提交的偏移量小于客户端的最后一个消息的偏移量，那么处于两个偏移量之间的消息就会被重复处理。
 
 如果提交的偏移量大于客户端最后一个消息的偏移量，那么处于两个偏移量之间的消息将会丢失。
+
+#### _consumer_offset
+
+_consumer_offset是kafka自行创建的，因此用户不可擅自删除该topic的所有信息。Kafka集群在执行了一些消费操作后，会发现在Kafka的日志目录下出现很多consumer_offset文件夹，编号从 0到49，这些文件夹属于consumer_offsets的。
+
+打开一个文件夹，一个正常的Kafka topic日志文件目录，里面至少有一个日志文件(.log)，和两个索引文件(.index和timeindex)。该日志中保存的消息都是Kafka集群上consumer的位移信息。
+
+可以把日志看作一个KV格式的消息，key是一个三元组：group.id+topic+分区号，而value就是offset的值。每当更新同一个key的最新offset值时，该topic就会写入一条含有 最新offset的消息，同时Kafka会定期地对该topic执行压实操作，即为每个消息key只保存含有最新offset地消息。
+
+考虑到一个Kafka生产环节中可能有多个consumer或者consumer group ，如果这些consumer同时提交位移，则必将加重_consumer_offsets地写入负载，因此特地为该topic创建50个分区，并且对每个group.id做哈希求模操作，从而将负载分散到不同的consumer_offsets分区上。
 
 #### 自动提交偏移量
 
@@ -199,6 +235,61 @@ Map<TopicPartition,OffsetAndMetadata> currentOffsets = new HashMap<>();
  
 ```
 
+#### 重平衡
+
+假设某个组有20个consumer实例，该组订阅了一个有100个分区的topic，正常情况下，Kafka会为每个consumer平均分配5个分区。这个分配过程就称为重平衡(rebalance)。
+
+新版本consumer使用了Kafka内置的一个全新的组协调协议(group coordination protocol)，对每个组而言，Kafka的某个broker会被选举为组协调者(group coordinator)。coordiantor负责对组的状态进行管理，它的主要职责就是当新成员到达时促成所有成员达成新的分区分配方案，即coordinator负责对组执行rebalance操作。
+
+1. rebalance触发条件
+
+* 组员发生变更，比如新consumer加入组，或已有consumer主动离开组，再或是已有consumer崩溃时则触发rebalance。
+* 组订阅topic数发生变更，比如使用基于正则表达式的订阅，当匹配正则表达式的新topic被创建时则会触发rebalance。
+* 组订阅 topic的分区数发生变更，比如使用命令行脚本增加了订阅topic的分区数。
+
+2. rebalance分区分配
+
+Kafka新版本consumer默认提供了3种分配策略，分别是range策略、round-robin策略和sticky策略。consumer默认的分配策略是range。
+
+* range策略主要是基于范围的思想，它将单个topic的所有分区按照顺序排列，然后把这些分区分成固定大小的分区段并依次分配给每个consumer。
+* round-robin策略则会把所有topic的所有分区顺序摆开，然后轮询式地分配给各个consumer。
+* sticky策略可以规避极端情况下的数据倾斜并且在两次rebalance间最大限度地维持之前的分配方案。
+
+![](../images/kafka/rebalancer.png)
+
+3. rebalance generation
+
+genration这个词类似于JVM分代垃圾收集器中“分代”，在consumer中它通常从0开始。Kafka引入consumer generation主要是为了保护consumer group的，特别是防止无效offset提交。比如上一届的consumer成员由于某些原因延迟提交了offset，但rebalance之后该group产生了新一届的goup成员，而这次延迟的offset提交携带的是旧的generation信息，因此这次提交会被consumer group 拒绝。
+
+![](../images/kafka/generation.png)
+
+4. rebalance 协议
+
+* Joinroup 请求：consumer请求加入组
+* SyncGroup 请求：group leader把分配方案同步更新到组内所有成员。
+* Heartbeat请求：consumer定期向coordinator汇报心跳表明自己依然存活
+* DescribeGroup 请求：查看组的所有信息，包括成员信息、协议信息、分配方案以及订阅信息等。
+
+在rebalance过程中，coordinator主要处理consumer发过来的JoinGroup和SyncGroup请求，当sonsumer主动离组时会发送LeaveGroup请求给coordinator。
+
+在成功rebalance之后，组内所有consumer都需要定期地向coordinator发送Heartbeat请求。而每个consumer也是根据Heartbeat请求的响应中是否包含REBALANCE_IN_PROGRESS来判断当前group是否开启新一轮rebalance。
+
+5. rebalance流程
+
+consumer group 在执行rebalance之前必须首先确定coordinator所在的broker，并创建与该broker相互通信的Socket连接，算法如下：
+
+* 计算Math.abs(groupID.hashCode)%offsets.topic.num.partitiions参数值（默认是50），假设计算出的值为10。
+* 寻找_consumer_offsets分区为10的leader副本所在的broker，该broker即这个group 的coordinator。
+
+确定coordiantor的算法与确定offset被提交到_sonsumer_offsets目标分区的算法是相同的，成功连接coordinator之后便可以执行rebalance操作。
+
+目前rebalance主要分为两步：
+
+* 加入组：组内所有consumer向coordinator发送JoinGroup请求当收集全JoinGroup请求后，coordinator从中选择一个consumer 担任leader，并把所有成员信息以及它们的订阅信息发送给leader，leader负责整个group的成员制定分配方案。group 的leader和coordinator不是一个概念，leader是某个consumer实例，而coordinator通常是Kafka集群中的一个broker。
+* 同步更新分配方案：这一步中leader开始制定分配方案，根据前面的分配策略决定每个consumer都负责哪些topic的哪些分区。一旦分配完成，leader会把这个分配方案装进SyncGroup并发送给coordinator。组内的所有成员都会发送SyncGroup请求，但是只有leader发送的SyncGroup请求中包含了分配方案。coordinator接收到分配方案后把属于每个consumer的方案单独抽取出来作为SyncGroup请求的response返还给各自的consumer。
+
+
+
 #### 再均衡监听器
 
 在消费者执行subscribe方法时传进去一个ConsumerRebalanceListener实例就可以了，它有两个需要实现的方法：
@@ -246,4 +337,5 @@ while (true) {
 3. 创建完均衡监听器后，我们需要订阅主题触发监听，然后调用一次poll方法，让消费者加入到消费者群组里，然后分配到新的分区后，会触发onPartitionsAssigned方法，然后马上调用seek()方法定位分区的偏移量。
 4. 定位完分区后，在while()循环中重新调用poll方法来获取记录。
 5. 最后更新数据库中的偏移量和记录。
+
 

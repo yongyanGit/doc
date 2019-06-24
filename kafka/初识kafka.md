@@ -243,7 +243,7 @@ kafka默认提供了kafka-console-producer和kafka-console-consumer脚本，这�
 生产者：
 
 ```
-kafka-console-producer.sh --broker-list localhost92,localhost:9093,localhost:9094 --topic test-topic1
+kafka-console-producer.sh --broker-list localhost:9092,localhost:9093,localhost:9094 --topic test-topic1
 ```
 
 消费者：
