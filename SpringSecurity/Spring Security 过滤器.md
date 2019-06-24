@@ -61,7 +61,7 @@ public void doFilter(ServletRequest req, ServletResponse res, FilterChain chain)
 	SecurityContext contextBeforeChainExecution = repo.loadContext(holder);
 	try {
         //将上下问信息保存到SecurityContextHolder中
-		SecurityContextHolder.setContext(contextBeforeChainExecution);
+SecurityContextHolder.setContext(contextBeforeChainExecution);
 		chain.doFilter(holder.getRequest(), holder.getResponse());
 	}
 	finally {
@@ -69,8 +69,10 @@ public void doFilter(ServletRequest req, ServletResponse res, FilterChain chain)
 					.getContext();
 		//请求结束后清空安全上下问信息
 		SecurityContextHolder.clearContext();
+        //将Security保存到HttpSession中，下次请求的时候就可以利用保存好的SecurityContext
 		repo.saveContext(contextAfterChainExecution, holder.getRequest(),
 					holder.getResponse());
+        //移除filter_applied
 		request.removeAttribute(FILTER_APPLIED);
 	}
 	}
@@ -85,6 +87,7 @@ public SecurityContext loadContext(HttpRequestResponseHolder requestResponseHold
 	HttpServletResponse response = requestResponseHolder.getResponse();
     //获取session
 	HttpSession httpSession = request.getSession(false);
+    //从HttpSession中获取SecurityContext
 	SecurityContext context = readSecurityContextFromSession(httpSession);
 	//如果context为null，则创建一个新的SecurityContext
 	if (context == null) {
@@ -115,6 +118,8 @@ private SecurityContext readSecurityContextFromSession(HttpSession httpSession) 
 
 表单认证是最常用的一个认证方式，一个最直观的业务场景是允许用户在表单中输入用户名和密码进行登陆。
 
+![](../images/security/userpassword.jpg)
+
 ```java
 public Authentication attemptAuthentication(HttpServletRequest request,
 			HttpServletResponse response) throws AuthenticationException {
@@ -141,7 +146,7 @@ public Authentication attemptAuthentication(HttpServletRequest request,
 }
 ```
 
-UsernamePasswordAuthenticationFilter本身并没有处理逻辑处理，主要在其分类中有大量细节
+UsernamePasswordAuthenticationFilter本身并没有处理逻辑处理，主要在其父类```AbstractAuthenticationProcessingFilter```中有大量细节
 
 ```java
 //包含了一个身份认证器
@@ -200,7 +205,7 @@ public void doFilter(ServletRequest req, ServletResponse res, FilterChain chain)
 }
 ```
 
-3. AnonymousAuthenticationFilter：匿名认证过滤器
+3. AnonymousAuthenticationFilter：匿名认证过滤器。Spring Security 为了整体逻辑的统一性，即使是未通过认证的用户，也给予一个匿名身份。```AnonymousAuthenticationFilter```位```UsernamePasswordAuthenticationFilter、BasicAuthenticationFilter、RememberMeAuthenticationFilter```之后，意味着只有在上述身份过滤器执行完后，SecurityContext依旧没有用户信息，会给用户一个匿名身份。
 
  ```java
 //自动创建一个anonymousUser的匿名用户，让其具有ROLE_ANONYMOUS角色
@@ -229,14 +234,15 @@ public void doFilter(ServletRequest req, ServletResponse res, FilterChain chain)
 
 4. ExceptionTranslationFilter
 
-ExceptionTranslationFilter异常转换过滤器位于整个springSecurityFilterChain的后方，用来转换整个链路中出现的异常，将其转化。一般只处理两大类的异常：AccessDeniedException访问异常和AuthenticationException认证异常。
+ExceptionTranslationFilter异常转换过滤器位于整个springSecurityFilterChain的后方，用来转换整个链路中出现的异常，将其转化。一般只处理两大类的异常：AccessDeniedException(登陆了但是权限不足)访问异常和AuthenticationException(未登陆状态下访问受保护资源)认证异常。
 
 如果该过滤器检测到AuthenticationException，则将会交给内部的AuthenticationEntryPoint去处理，如果检测到AccessDeniedException，需要先判断当前用户是不是匿名用户，如果是匿名访问，则和前面一样运行AuthenticationEntryPoint，否则会委托给AccessDeniedHandler去处理。
 
 ```java
 private void handleSpringSecurityException(HttpServletRequest request,
 	HttpServletResponse response, FilterChain chain, RuntimeException exception)throws IOException, ServletException {
-        //重新定向到登陆端点
+   if (exception instanceof AuthenticationException) {
+       //如果未登录访问受保护的资源，重定向到登录端点
 		sendStartAuthentication(request, response, chain,
 		(AuthenticationException) exception);
 	}
@@ -254,7 +260,7 @@ private void handleSpringSecurityException(HttpServletRequest request,
 "Full authentication is required to access this resource")));
 			}
 			else {
-                //交给accessDeniedHandler处理
+                //如果登录了，但是未授权的交给accessDeniedHandler处理
 				accessDeniedHandler.handle(request, response,
 						(AccessDeniedException) exception);
 			}
@@ -262,7 +268,47 @@ private void handleSpringSecurityException(HttpServletRequest request,
 	}
 ```
 
+![](../images/security/exception.png)
+
+如果是未登录访问受保护的资源，会重定向到登录端口：
+
+```java
+protected void sendStartAuthentication(HttpServletRequest request,HttpServletResponse response, FilterChain chain,
+AuthenticationException reason) throws ServletException, IOException {		SecurityContextHolder.getContext().setAuthentication(null);                                                                 requestCache.saveRequest(request, response);
+//将请求重定向到登录界面 LoginUrlAuthenticationEntryPoint
+authenticationEntryPoint.commence(request, response, reason);
+	}
+```
+
+如果登录了，但是没有访问权限，则返回403错误：
+
+```java
+public void handle(HttpServletRequest request, HttpServletResponse response,AccessDeniedException accessDeniedException) throws IOException,
+			ServletException {
+		if (!response.isCommitted()) {
+			if (errorPage != null) {
+				// Put exception into request scope (perhaps of use to a view)
+				request.setAttribute(WebAttributes.ACCESS_DENIED_403,
+						accessDeniedException);
+
+				// Set the 403 status code.
+				response.setStatus(HttpStatus.FORBIDDEN.value());
+
+				// forward to error page.
+				RequestDispatcher dispatcher = request.getRequestDispatcher(errorPage);
+				dispatcher.forward(request, response);
+			}
+			else {
+				response.sendError(HttpStatus.FORBIDDEN.value(),
+					HttpStatus.FORBIDDEN.getReasonPhrase());
+			}
+		}
+	}
+```
+
+
+
 5. FilterSecurityInterceptor
 
-用来控制哪些资源是受限的，受限的资源需要什么权限。FileterSecurityInterceptor从SecurityContextHolder中获取a
+用来控制哪些资源是受限的，受限的资源需要什么权限。FileterSecurityInterceptor从SecurityContextHolder中获取Authentication对象，然后对比用户拥有的权限和资源所需的权限。
 

@@ -126,7 +126,7 @@ private int dowait(boolean timed, long nanos)
             if (g.broken)
                 throw new BrokenBarrierException();
 			//如果有线程被中断了，则将Generation的状态设置为false,然后唤醒所有的阻塞线程
-            //被唤醒的线程获取到broken的状态为false，页抛出异常
+            //被唤醒的线程获取到broken的状态为false，也抛出异常
             if (Thread.interrupted()) {
                 breakBarrier();
                 throw new InterruptedException();

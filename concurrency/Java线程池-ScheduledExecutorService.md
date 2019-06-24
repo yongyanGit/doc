@@ -78,7 +78,8 @@ private void delayedExecute(RunnableScheduledFuture<?> task) {
                 remove(task))
                 task.cancel(false);
             else
-                ensurePrestart();//启动一个线程，确保任务能被执行
+                //启动一个线程(不一定能启动)，确保任务能被执行
+                ensurePrestart();
         }
     }
 ```
@@ -163,7 +164,7 @@ public boolean offer(Runnable x) {
  }
 ```
 
-* ensurePrestart()，启动一个线程。
+* ensurePrestart()，启动一个线程，如果当前现场数已经小于corePoolSize才会启动新的线程
 
 ```java
 void ensurePrestart() {
