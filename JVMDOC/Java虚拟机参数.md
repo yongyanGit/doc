@@ -4,7 +4,7 @@
 
 1. 打印垃圾回收参数：-XX:+PrintGC
 
-![](/Users/user/Documents/gitWorkSpace/doc/images/jvm/gclog.png)
+![](../images/jvm/gclog.png)
 
 如上日志显示，一共进行了4次GC，每次GC占用一行，在GC前，堆空间使用约4M，GC后，堆空间使用量为377k，当前可用的堆空间和约为16M，最后是本次GC所花费的时间。
 
