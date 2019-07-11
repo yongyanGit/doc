@@ -17,17 +17,17 @@
 gc
 ```
 
-[GC 和[Full GC 说明了这次垃圾收集的停顿类型，如果有"Full"，说明这次GC是发生了Stop-The-World的，如果是调用System.gc()方法所触发的收集，那么会显示"[Full GC (System)]"。
+[GC 和[Full GC 说明了这次垃圾收集的停顿类型，如果有"Full"，说明这次GC是发生了Stop-The-World的(一般是发生分配担保失败之类的问题，才导致STW)，如果是调用System.gc()方法所触发的收集，那么会显示"[Full GC (System)]"(我们应该禁止使用System.gc()方法，它会触发full GC)。
 
 接下来"[PSYoungGen“表示GC发生的区域，例如使用Serial收集器，新生代名称为“Default New Generation”，所以显示的是"[DefNew"。如果是ParNew收集器，新生代名称就会变为"[ParNew"，意义为"Parallel New Generation"。如果采用Parallel Scavenge收集器，那它配套的新生代名称为"PSYoungGen"，老年代和永久代同理，名称也是由收集器决定的。
 
 方括号内部的6809k->384k(38400k)含义是该内存区域已使用容量->GC后该内存区域已使用容量（该内存区域总容量）。而方括号之外的6809k->392k(125952k)表示GC前堆已使用容量-> GC后Java堆已使用容量(Java堆总容量。
 
-再往后，"0.0025925 secs"表示该内 存内存区域GC所占有的时间，单位是秒。有的收集器会给出具体的时间数据，如：[Times: user=0.01 sys=0.00, real=0.01 secs]，这里面的user、sys和real分别代表用户态消耗的CPU时间、内核态消耗的CPU时间和操作从开始到结束所经过的墙钟时间。CPU时间和墙钟时间的区别是：墙钟时间包括各种非运算的等待耗时，例如：等待磁盘I/O、等待线程阻塞，而CPU时间不包括这些耗时。
+再往后，"0.0025925 secs"表示该内存内存区域GC所占有的时间，单位是秒。有的收集器会给出具体的时间数据，如：[Times: user=0.01 sys=0.00, real=0.01 secs]，这里面的user、sys和real分别代表用户态消耗的CPU时间、内核态消耗的CPU时间和操作从开始到结束所经过的墙钟时间。CPU时间和墙钟时间的区别是：墙钟时间包括各种非运算的等待耗时，例如：等待磁盘I/O、等待线程阻塞，而CPU时间不包括这些耗时。
 
 2. 打印GC发生的时间
 
-如果需要分析GC发生的时间，还可以使用-XX:+PrintGCDetails参数，该参数会在GC时，额外的输出GC发生时间，该时间是虚拟机启动后的时间偏移量。
+如果需要分析GC发生的时间，还可以使用-XX:+PrintGCTimeStamps参数，该参数会在GC时，额外的输出GC发生时间，该时间是虚拟机启动后的时间偏移量。
 
 ```
 0.142: [GC (Allocation Failure) [PSYoungGen: 7675K->912K(9216K)] 7675K->1432K(19456K), 0.0013736 secs] [Times: user=0.00 sys=0.00, real=0.00 secs] 
@@ -311,7 +311,8 @@ directAllocate:315
 ```java
 public class GCDemo {
 	
-	//-verbose:gc  -Xms20M -Xmx20M -Xmn10M -XX:+PrintGCDetails -XX:SurvivorRatio=8
+	//-verbose:gc  -Xms20M -Xmx20M -Xmn10M -XX:+PrintGCDetails -XX:SurvivorRatio=8 -XX:+UseSerialGC
+	//堆大小固定在20M，新生代大小分配10M，eden和survivor的比例是8:1(默认)  ,JDK1.8
 	private static final int _1MB = 1024*1024;
 	public static void main(String[] args){
 		testAllocation();
@@ -331,33 +332,65 @@ public class GCDemo {
 执行结果：
 
 ```json
+[GC (Allocation Failure) [DefNew: 7127K->528K(9216K), 0.0027078 secs] 7127K->6672K(19456K), 0.0027316 secs] [Times: user=0.00 sys=0.00, real=0.00 secs] 
 Heap
- PSYoungGen      total 9216K, used 6816K [0x00000007bf600000, 0x00000007c0000000, 0x00000007c0000000)                                         
-  eden space 8192K, 83% used [0x00000007bf600000,0x00000007bfca8068,0x00000007bfe00000)                                        
-  from space 1024K, 0% used [0x00000007bff00000,0x00000007bff00000,0x00000007c0000000)                                        
-  to   space 1024K, 0% used [0x00000007bfe00000,0x00000007bfe00000,0x00000007bff00000)                                         
- ParOldGen       total 10240K, used 4096K [0x00000007bec00000, 0x00000007bf600000, 0x00000007bf600000)
-  object space 10240K, 40% used [0x00000007bec00000,0x00000007bf000010,0x00000007bf600000)                                     
- Metaspace       used 2641K, capacity 4486K, committed 4864K, reserved 1056768K                                        
-class space    used 286K, capacity 386K, committed 512K, reserved 1048576K
+ def new generation   total 9216K, used 4706K [0x00000000fec00000, 0x00000000ff600000, 0x00000000ff600000)
+  eden space 8192K,  51% used [0x00000000fec00000, 0x00000000ff014930, 0x00000000ff400000)
+  from space 1024K,  51% used [0x00000000ff500000, 0x00000000ff584250, 0x00000000ff600000)
+  to   space 1024K,   0% used [0x00000000ff400000, 0x00000000ff400000, 0x00000000ff500000)
+ tenured generation   total 10240K, used 6144K [0x00000000ff600000, 0x0000000100000000, 0x0000000100000000)
+   the space 10240K,  60% used [0x00000000ff600000, 0x00000000ffc00030, 0x00000000ffc00200, 0x0000000100000000)
+ Metaspace       used 2601K, capacity 4486K, committed 4864K, reserved 1056768K
+  class space    used 288K, capacity 386K, committed 512K, reserved 1048576K
 
 ```
 
--Xms20M -Xmx20M -Xmn10M 分别指定JVM启动时分配的内存、JVM运行过程中分配的最大内存、年轻代的大小。XX:SurvivorRatio决定了新生代中Eden区与一个Survivor区的空间比例是8:1。
+-Xms20M -Xmx20M -Xmn10M 分别指定JVM启动时分配的内存、JVM运行过程中分配的最大内存、年轻代的大小。XX:SurvivorRatio决定了新生代中Eden区与一个Survivor区的空间比例是8:1。-XX:+UseSerialGC指定使用SerialGC垃圾回收器。
 
 从上面的执行结果可以看出，新生代按照：8:1:1的比例来分配的，即：eden space 8192K 、from space 1024K、to space 1024K，所以新生代可以使用的空间为9216k(Eden+1个Survivor区的总容量)。
 
-另外，按照创建对象的顺序，当执行allocation4 = new byte[4*_1MB];时，新生代可用空间已经使用80%，已经不够存放allocation4，这时是需要执行GC来释放空间的，但是从执行结果中可以看出JVM并没有执行垃圾回收。这是因为大对象可以直接进入老年代，这样做的目的是避免在Eden区以及两个Survivor区之间发生大量的内存复制。Serial和ParNew两款收集器可以通过PretenureSizeThreshold参数来设置进入老年代的临界值。因此整个程序执行完后，allocation1、allocation2、allocation3存放在新生代，占有6M内存空间，然后allocation4创建的时候，由于新生代空间不够了，就直接存放到老年代了，因此ParOldGen使用了4096K内存。
+按照创建对象的顺序，当执行allocation4 = new byte[4*_1MB];时，新生代已经存放了6M的数据，剩下的空间不够存放allocation4，所以垃圾回收器执行了一次MinorGC，由于allocation1、allocation2、allocation3仍然是存活的状态并且survivor没有足够的容量来存储这些对象，因此它们直接进入老年代，因此老年代大概使用了6M的空间，而新增的allocation4存放在新生代。
+
+
+
+#### 大对象直接进入老年代
+
+大对象是指需要大量连续内存空间的Java对象，经常出现大对象容易导致内存还有不少空间就提前触发垃圾收集以收获足够的连续空间来存储它们。
+
+虚拟机提供了一个-XX:PretenureSizeThreshold参数，令大于这个设置值的对象直接在老年代分配，这样做的目的是避免在Eden区及两个Survivor区之间发生大量的内存复制。
+
+```java
+public static void testPretenureSizeThreshold() {
+	//-verbose:gc  -Xms20M -Xmx20M -Xmn10M -XX:+PrintGCDetails -XX:SurvivorRatio=8 -XX:+UseSerialGC -XX:PretenureSizeThreshold=3145728
+		byte[] allocation = new byte[4*_1MB];
+}
+```
+
+GC日志：
+
+```json
+Heap
+ def new generation   total 9216K, used 1148K [0x00000000fec00000, 0x00000000ff600000, 0x00000000ff600000)
+  eden space 8192K,  14% used [0x00000000fec00000, 0x00000000fed1f048, 0x00000000ff400000)
+  from space 1024K,   0% used [0x00000000ff400000, 0x00000000ff400000, 0x00000000ff500000)
+  to   space 1024K,   0% used [0x00000000ff500000, 0x00000000ff500000, 0x00000000ff600000)
+ tenured generation   total 10240K, used 4096K [0x00000000ff600000, 0x0000000100000000, 0x0000000100000000)
+   the space 10240K,  40% used [0x00000000ff600000, 0x00000000ffa00010, 0x00000000ffa00200, 0x0000000100000000)
+ Metaspace       used 2601K, capacity 4486K, committed 4864K, reserved 1056768K
+  class space    used 288K, capacity 386K, committed 512K, reserved 1048576K
+```
+
+如上代码执行后，新生代几乎没有被使用，但是在老年代的10M空间被使用了40%，也就是4MB的allocation对象直接就被分配在老年代中，这是因为PretenureSizeThreshold被设置为3MB,如果大于3MB的 对象将直接被分配在老年代。
+
+PretenureSizeThreshold只对Serial和ParNew两款收集器有效，Parallel Scavenge不需要设置，它会自动判断大对象来选择是否将大对象存储在老年代。
 
 #### 长期存活的对象进入老年代
 
-虚拟机给每个对象定义了一个对象年龄(Age)计数器，如果对象在Eden出生并经过一次MinorGC 后仍然存活，并且能被Survivor 容纳的话，将被移动到Survivor空间中，并且对象年龄被设置为1，对象在Survivor中每熬过一次MinorGC，年龄就增加1岁，当它的年龄增加到一定的程度（默认为15岁，可以通过 -XX:MaxTenuringThreshold来设置），就会晋升到老年代。
+虚拟机给每个对象定义了一个对象年龄(Age)计数器，如果对象在Eden出生并经过一次MinorGC 后仍然存活，并且能被Survivor 容纳的话，将被移动到Survivor空间中，对象年龄被设置为1，对象在Survivor中每熬过一次MinorGC，年龄就增加1岁，当它的年龄增加到一定的程度（默认为15岁，可以通过 -XX:MaxTenuringThreshold来设置），就会晋升到老年代。
 
 #### 动态对象年龄判定
 
 虚拟机并不是永远地要求对象的年龄必须达到MaxTenuringThreshold才能晋升到老年代，如果在Survivor空间中相同年龄所有对象大小的总和大于Survivor空间的一半，年龄大于或者等于该年龄的对象就直接进入老年代，无需等到MaxTenuringThreshold中要求的年龄。
-
-
 
 #### 空间分配担保
 
@@ -393,7 +426,7 @@ public static void testHandlePromotion(){
 
 执行结果：
 
-```son
+```json
 [GC (Allocation Failure) [PSYoungGen: 6651K->400K(9216K)] 6651K->4504K(19456K), 0.0035274 secs] [Times: user=0.01 sys=0.00, real=0.01 secs] 
 [GC (Allocation Failure) [PSYoungGen: 6705K->368K(9216K)] 10809K->4472K(19456K), 0.0006105 secs] [Times: user=0.00 sys=0.00, real=0.00 secs] 
 Heap
