@@ -17,7 +17,7 @@
 gc
 ```
 
-[GC 和[Full GC 说明了这次垃圾收集的停顿类型，如果有"Full"，说明这次GC是发生了Stop-The-World的(一般是发生分配担保失败之类的问题，才导致STW)，如果是调用System.gc()方法所触发的收集，那么会显示"[Full GC (System)]"。
+[GC 和[Full GC 说明了这次垃圾收集的停顿类型，如果有"Full"，说明这次GC是发生了Stop-The-World的(一般是发生分配担保失败之类的问题，才导致STW)，如果是调用System.gc()方法所触发的收集，那么会显示"[Full GC (System)]"(我们应该禁止使用System.gc()方法，它会触发full GC)。
 
 接下来"[PSYoungGen“表示GC发生的区域，例如使用Serial收集器，新生代名称为“Default New Generation”，所以显示的是"[DefNew"。如果是ParNew收集器，新生代名称就会变为"[ParNew"，意义为"Parallel New Generation"。如果采用Parallel Scavenge收集器，那它配套的新生代名称为"PSYoungGen"，老年代和永久代同理，名称也是由收集器决定的。
 
@@ -355,21 +355,42 @@ Heap
 
 #### 大对象直接进入老年代
 
-大对象是指需要大量连续内存空间的Java对象。
+大对象是指需要大量连续内存空间的Java对象，经常出现大对象容易导致内存还有不少空间就提前触发垃圾收集以收获足够的连续空间来存储它们。
 
+虚拟机提供了一个-XX:PretenureSizeThreshold参数，令大于这个设置值的对象直接在老年代分配，这样做的目的是避免在Eden区及两个Survivor区之间发生大量的内存复制。
 
+```java
+public static void testPretenureSizeThreshold() {
+	//-verbose:gc  -Xms20M -Xmx20M -Xmn10M -XX:+PrintGCDetails -XX:SurvivorRatio=8 -XX:+UseSerialGC -XX:PretenureSizeThreshold=3145728
+		byte[] allocation = new byte[4*_1MB];
+}
+```
 
+GC日志：
 
+```json
+Heap
+ def new generation   total 9216K, used 1148K [0x00000000fec00000, 0x00000000ff600000, 0x00000000ff600000)
+  eden space 8192K,  14% used [0x00000000fec00000, 0x00000000fed1f048, 0x00000000ff400000)
+  from space 1024K,   0% used [0x00000000ff400000, 0x00000000ff400000, 0x00000000ff500000)
+  to   space 1024K,   0% used [0x00000000ff500000, 0x00000000ff500000, 0x00000000ff600000)
+ tenured generation   total 10240K, used 4096K [0x00000000ff600000, 0x0000000100000000, 0x0000000100000000)
+   the space 10240K,  40% used [0x00000000ff600000, 0x00000000ffa00010, 0x00000000ffa00200, 0x0000000100000000)
+ Metaspace       used 2601K, capacity 4486K, committed 4864K, reserved 1056768K
+  class space    used 288K, capacity 386K, committed 512K, reserved 1048576K
+```
+
+如上代码执行后，新生代几乎没有被使用，但是在老年代的10M空间被使用了40%，也就是4MB的allocation对象直接就被分配在老年代中，这是因为PretenureSizeThreshold被设置为3MB,如果大于3MB的 对象将直接被分配在老年代。
+
+PretenureSizeThreshold只对Serial和ParNew两款收集器有效，Parallel Scavenge不需要设置，它会自动判断大对象来选择是否将大对象存储在老年代。
 
 #### 长期存活的对象进入老年代
 
-虚拟机给每个对象定义了一个对象年龄(Age)计数器，如果对象在Eden出生并经过一次MinorGC 后仍然存活，并且能被Survivor 容纳的话，将被移动到Survivor空间中，并且对象年龄被设置为1，对象在Survivor中每熬过一次MinorGC，年龄就增加1岁，当它的年龄增加到一定的程度（默认为15岁，可以通过 -XX:MaxTenuringThreshold来设置），就会晋升到老年代。
+虚拟机给每个对象定义了一个对象年龄(Age)计数器，如果对象在Eden出生并经过一次MinorGC 后仍然存活，并且能被Survivor 容纳的话，将被移动到Survivor空间中，对象年龄被设置为1，对象在Survivor中每熬过一次MinorGC，年龄就增加1岁，当它的年龄增加到一定的程度（默认为15岁，可以通过 -XX:MaxTenuringThreshold来设置），就会晋升到老年代。
 
 #### 动态对象年龄判定
 
 虚拟机并不是永远地要求对象的年龄必须达到MaxTenuringThreshold才能晋升到老年代，如果在Survivor空间中相同年龄所有对象大小的总和大于Survivor空间的一半，年龄大于或者等于该年龄的对象就直接进入老年代，无需等到MaxTenuringThreshold中要求的年龄。
-
-
 
 #### 空间分配担保
 
@@ -405,7 +426,7 @@ public static void testHandlePromotion(){
 
 执行结果：
 
-```son
+```json
 [GC (Allocation Failure) [PSYoungGen: 6651K->400K(9216K)] 6651K->4504K(19456K), 0.0035274 secs] [Times: user=0.01 sys=0.00, real=0.01 secs] 
 [GC (Allocation Failure) [PSYoungGen: 6705K->368K(9216K)] 10809K->4472K(19456K), 0.0006105 secs] [Times: user=0.00 sys=0.00, real=0.00 secs] 
 Heap
