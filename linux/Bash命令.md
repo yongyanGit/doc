@@ -114,6 +114,8 @@ bird
 
 #### 环境变量
 
+* env命令：
+
 ```
 ngyan@localhost ~]$ env
 
@@ -140,7 +142,61 @@ HOME=/home/yongyan
 LOGNAME=yongyan
 ## 上一次使用的指令的最后一个参数
 _=/usr/bin/env
+
+
 ```
 
+* set命令：含环境变量和自定义变量
 
+```
+userdeMacBook-Pro:doc user$ set
+
+## bash 主程序放置的路径
+BASH=/bin/bash
+
+##bash 的版本
+BASH_VERSINFO=([0]="3" [1]="2" [2]="57" [3]="1" [4]="release" [5]="x86_64-apple-darwin18")
+BASH_VERSION='3.2.57(1)-release'
+
+## 在目前的终端机环节下，使用的字段有几个字符长度
+COLUMNS=80
+
+## 历史命令记录的放置文件，隐藏目录
+HISTFILE=/Users/user/.bash_sessions/02A8425A-7562-462D-921C-C5B795263B68.history
+## HISTFILE 文件存储的指令最大数目
+HISTFILESIZE=500
+## 当前环境下，内存中记录的历史命令最大笔数
+HISTSIZE=500
+## 按照的机器类型
+MACHTYPE=x86_64-apple-darwin18
+## 操作系统类型
+OSTYPE=darwin18
+## 命令提示符
+PS1='\h:\W \u\$ '
+```
+
+1. PS1
+
+在控制台当按下enter按键去执行某个命令，最后会出现提示符时，就会去读取这个变量，然后根据这个变量格式来显示提示符。
+
+![](../images/linux/set.png)
+
+比如，在osx环境下我的PS1的值是PS1='\h:\W \u\$ '，它代表的意思分别是："主机名称：+工作目录+当前登录用户的账户名称\$"，即：userdeMacBook-Pro:doc user$。
+
+2. $ 
+
+代表的是目前这个Shell的线程代号，也就是PID。
+
+3. ?
+
+问号也是一个变量。它代表的是上一个执行的指令所返回的值。如果执行成功，一般会回传一个0值。
+
+```
+userdeMacBook-Pro:doc user$ echo $SHELL
+/bin/bash
+userdeMacBook-Pro:doc user$ echo $?
+0
+```
+
+#### export：自定义变量转成环境变量
 
