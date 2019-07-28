@@ -198,5 +198,74 @@ userdeMacBook-Pro:doc user$ echo $?
 0
 ```
 
-#### export：自定义变量转成环境变量
+#### 变量键盘读取
+
+```
+read [-pt] variable
+```
+
+* -p : 后面接提示字符。
+
+* -t : 接等待的秒数。
+
+```
+[yongyan@localhost ~]$ read -p "Please keyin your name:" -t 30 named 
+Please keyin your name:yan
+[yongyan@localhost ~]$ echo ${named} 
+yan
+```
+
+#### 变量的宣告
+
+```
+declare/typeset [-aixr] variable
+```
+
+* -a : 将后面名为variable的变量定义为数组类型
+* -i : 将后面名为variable的变量定义为整数数字类型
+* -x : 用法与export一样，就是将后面的variable 变成环境变量
+* -r : 将变量设定为readonly类型，该变量不可更改内容，也不能unset。
+
+```
+[yongyan@localhost ~]$ sum=100+300+50
+## 变量默认是字符串，所以如果不指定，则100+300+50是字符串
+[yongyan@localhost ~]$ echo ${sum}
+100+300+50
+## 将类型设置为整数类型
+[yongyan@localhost ~]$ declare -i sum=100+300+50
+[yongyan@localhost ~]$ echo ${sum}
+450
+## -x 将变量变成环境变量
+[yongyan@localhost ~]$ declare -x sum
+[yongyan@localhost ~]$ export | grep sum
+declare -ix sum="450"
+## -r 将变量变成只读
+[yongyan@localhost ~]$ declare -r sum
+[yongyan@localhost ~]$ sum=tes
+bash: sum: 只读变量
+## +x取消全局环境变量
+[yongyan@localhost ~]$ declare +x sum
+## -p 单独列出变量的类型
+[yongyan@localhost ~]$ declare -p sum
+declare -ir sum="450"
+```
+
+**数组变量类型**
+
+```
+## var 数组名称 index 数组下标  content 数组内容
+var[index]=content
+
+[yongyan@localhost ~]$ var[1]="small min"
+[yongyan@localhost ~]$ var[2]="big min"
+[yongyan@localhost ~]$ var[3]="nice min"
+[yongyan@localhost ~]$ echo "${var[1]},${var[2]}"
+small min,big min
+```
+
+
+
+
+
+
 
