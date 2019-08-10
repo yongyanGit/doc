@@ -263,9 +263,19 @@ var[index]=content
 small min,big min
 ```
 
+**ulimit:与文件系统及程序的限制关系**
 
+bash可以限制用户的某些系统资源，如可以开启的文件数量、可以使用的CPU时间、可以使用的内存总量等等。
 
+```
+ulimit -[option] [配额]
+#列出所有限制的数据值
+ulimit -a
+#限制用户仅能建立10MBytes以下的容量的文件
+ulimit -f 10240
+```
 
+![](../images/linux/ulimit.png)
 
 
 
