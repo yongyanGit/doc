@@ -306,6 +306,8 @@ class文件中方法的存储结构和字段一致，表结构也和字段一样
 
 #### 属性表集合
 
+**code属性**
+
 在Class文件、字段表、方法表都可以携带自己的属性表集合，以用来描述某些专有的信息，下面就方法表中的code属性来详细解释。
 
 java程序方法中的代码经过javac编译器处理后，最终变为字节码指令存储在Code属性内。
@@ -370,6 +372,12 @@ public zookeeperdemo.TestClass();
       LineNumberTable:
         line 8: 0
 ```
+
+**ConstantValue属性**
+
+ConstantValue属性的作用是通知虚拟机自动为静态变量赋值。只有被static关键字修饰的变量才可以使用这项属性。对于非static类型的变量的赋值在实例构造器```<init>```方法中进行的；对于静态变量，如果同时使用final来修饰，并且这个变量的数据类型是基本类型或者java.lang.String，就生成ConstantValue属性来进行初始化，如果这个变量的数据类型是基本变量没有被final修饰，或者并非基本类型及字符串，则会选择在```<clinit>```方法中进行初始化。
+
+![](../images/jvm/4.png)
 
 
 
