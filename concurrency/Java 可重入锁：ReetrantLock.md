@@ -392,7 +392,7 @@ public final void acquire(int arg) {
 }
 ```
 
-非公平锁与公平锁的差异在于尝试获取锁的实现方式，在公平锁
+非公平锁与公平锁的差异在于尝试获取锁的实现方式，
 
 ```java
 final boolean nonfairTryAcquire(int acquires) {

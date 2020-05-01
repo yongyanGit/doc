@@ -176,7 +176,7 @@ public final void acquireShared(int arg) {
         }
 ```
 
-```readerShouldBlock()```：方法，它在公平锁与非公平锁的唯一区别，它在公平锁中的实现如下：
+```readerShouldBlock()```：方法，公平锁与非公平锁的唯一区别，它在公平锁中的实现如下：
 
 ```java
 public final boolean hasQueuedPredecessors() {
